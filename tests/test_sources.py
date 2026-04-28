@@ -1,0 +1,39 @@
+from pathlib import Path
+import pytest
+from agenthound.collectors.sources import collect_sources
+from agenthound.models.nodes import Agent
+
+
+def test_collect_sources_finds_agent_instructions(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("# instructions")
+    agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    assert len(result.sources) >= 1
+    kinds = {s.source_kind for s in result.sources}
+    assert "AgentInstruction" in kinds
+
+
+def test_collect_sources_creates_influences_edges(tmp_path):
+    (tmp_path / "README.md").write_text("# readme")
+    agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edges = [e for e in result.edges if e.kind == "Influences"]
+    assert len(edges) == len(result.sources)
+    for edge in edges:
+        assert edge.end == agent.objectid
+
+
+def test_collect_sources_edge_starts_from_source(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("x")
+    agent = Agent(name="x", platform="X", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    source_ids = {s.objectid for s in result.sources}
+    for edge in result.edges:
+        assert edge.start in source_ids
+
+
+def test_collect_sources_empty_workspace(tmp_path):
+    agent = Agent(name="x", platform="X", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    assert result.sources == []
+    assert result.edges == []

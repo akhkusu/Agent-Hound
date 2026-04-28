@@ -1,6 +1,6 @@
 # Agent-Hound
 
-![Agent-Hound](logo.png)
+<img src="logo.png" width="300" alt="Agent-Hound"/>
 
 **BloodHound OpenGraph collector for AI agent attack paths.**
 

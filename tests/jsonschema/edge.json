@@ -1,0 +1,24 @@
+{
+  "title": "Generic Ingest Edge",
+  "type": "object",
+  "properties": {
+    "start": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "string" },
+        "match_by": { "type": "string" }
+      },
+      "required": ["value", "match_by"]
+    },
+    "end": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "string" },
+        "match_by": { "type": "string" }
+      },
+      "required": ["value", "match_by"]
+    },
+    "kind": { "type": "string" }
+  },
+  "required": ["start", "end", "kind"]
+}

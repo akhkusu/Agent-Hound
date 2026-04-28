@@ -1,0 +1,16 @@
+{
+  "title": "Generic Ingest Node",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "kinds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "properties": {
+      "type": ["object", "null"]
+    }
+  },
+  "required": ["id", "kinds"]
+}

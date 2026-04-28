@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg
+
+# Output
+agenthound_output.json
+*.json.bak
+
+# Claude Code generated
+CLAUDE.md
+docs/superpowers/
+.claude/
+*.claude.json
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp

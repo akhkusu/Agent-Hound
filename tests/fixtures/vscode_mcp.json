@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "my-tool": {
+      "command": "node",
+      "args": ["server.js"]
+    }
+  }
+}

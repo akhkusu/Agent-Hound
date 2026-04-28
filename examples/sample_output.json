@@ -1,0 +1,364 @@
+{
+  "metadata": {
+    "source_kind": "AgentHound"
+  },
+  "custom_types": {
+    "Agent": {
+      "icon": {
+        "name": "robot",
+        "type": "font-awesome",
+        "color": "#e74c3c"
+      }
+    },
+    "Source": {
+      "icon": {
+        "name": "file-import",
+        "type": "font-awesome",
+        "color": "#f39c12"
+      }
+    },
+    "Capability": {
+      "icon": {
+        "name": "bolt",
+        "type": "font-awesome",
+        "color": "#9b59b6"
+      }
+    },
+    "Asset": {
+      "icon": {
+        "name": "lock",
+        "type": "font-awesome",
+        "color": "#e67e22"
+      }
+    },
+    "Impact": {
+      "icon": {
+        "name": "skull",
+        "type": "font-awesome",
+        "color": "#c0392b"
+      }
+    }
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "agent-f626335e",
+        "kinds": [
+          "Agent"
+        ],
+        "properties": {
+          "objectid": "agent-f626335e",
+          "name": "CLAUDE-DESKTOP",
+          "displayname": "Claude Desktop",
+          "platform": "Claude Desktop",
+          "config_path": "tests/fixtures/claude_desktop_config.json"
+        }
+      },
+      {
+        "id": "source-5d4890d5",
+        "kinds": [
+          "Source"
+        ],
+        "properties": {
+          "objectid": "source-5d4890d5",
+          "name": "CLAUDE.MD",
+          "displayname": "CLAUDE.md",
+          "source_kind": "AgentInstruction",
+          "path": "CLAUDE.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-b7dfdda0",
+        "kinds": [
+          "Source"
+        ],
+        "properties": {
+          "objectid": "source-b7dfdda0",
+          "name": "QUERY.MD",
+          "displayname": "query.md",
+          "source_kind": "DocFile",
+          "path": "query.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-eeddd6bf",
+        "kinds": [
+          "Source"
+        ],
+        "properties": {
+          "objectid": "source-eeddd6bf",
+          "name": "README.MD",
+          "displayname": "README.md",
+          "source_kind": "DocFile",
+          "path": "README.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-23d05f52",
+        "kinds": [
+          "Source"
+        ],
+        "properties": {
+          "objectid": "source-23d05f52",
+          "name": "CHANGELOG.MD",
+          "displayname": "CHANGELOG.md",
+          "source_kind": "DocFile",
+          "path": "CHANGELOG.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-2385cbcb",
+        "kinds": [
+          "Source"
+        ],
+        "properties": {
+          "objectid": "source-2385cbcb",
+          "name": "2026-04-28-AGENT-HOUND.MD",
+          "displayname": "2026-04-28-agent-hound.md",
+          "source_kind": "DocFile",
+          "path": "docs/superpowers/plans/2026-04-28-agent-hound.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-d869f085",
+        "kinds": [
+          "Source"
+        ],
+        "properties": {
+          "objectid": "source-d869f085",
+          "name": "2026-04-28-AGENT-HOUND-DESIGN.MD",
+          "displayname": "2026-04-28-agent-hound-design.md",
+          "source_kind": "DocFile",
+          "path": "docs/superpowers/specs/2026-04-28-agent-hound-design.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "cap-8d507917",
+        "kinds": [
+          "Capability"
+        ],
+        "properties": {
+          "objectid": "cap-8d507917",
+          "name": "FILESYSTEM",
+          "displayname": "filesystem",
+          "cap_kind": "MCPServer",
+          "has_shell": false,
+          "command": "npx -y @modelcontextprotocol/server-filesystem /home/user/docs",
+          "transport": "stdio"
+        }
+      },
+      {
+        "id": "cap-16c00448",
+        "kinds": [
+          "Capability"
+        ],
+        "properties": {
+          "objectid": "cap-16c00448",
+          "name": "GITHUB",
+          "displayname": "github",
+          "cap_kind": "MCPServer",
+          "has_shell": false,
+          "command": "npx -y @modelcontextprotocol/server-github",
+          "transport": "stdio"
+        }
+      },
+      {
+        "id": "cap-307f3a30",
+        "kinds": [
+          "Capability"
+        ],
+        "properties": {
+          "objectid": "cap-307f3a30",
+          "name": "REMOTE",
+          "displayname": "remote",
+          "cap_kind": "MCPServer",
+          "has_shell": false,
+          "transport": "sse"
+        }
+      },
+      {
+        "id": "asset-d5bee0f9",
+        "kinds": [
+          "Asset"
+        ],
+        "properties": {
+          "objectid": "asset-d5bee0f9",
+          "name": "",
+          "displayname": "",
+          "asset_kind": "SourceCode",
+          "path": ".",
+          "readable": true,
+          "writable": true
+        }
+      },
+      {
+        "id": "impact-bca62f11",
+        "kinds": [
+          "Impact"
+        ],
+        "properties": {
+          "objectid": "impact-bca62f11",
+          "name": "INTERNET-EXFILTRATION",
+          "displayname": "internet-exfiltration",
+          "impact_kind": "Exfiltration",
+          "reachable": true,
+          "description": "Agent can send data to external URLs"
+        }
+      },
+      {
+        "id": "impact-9bbfe7b2",
+        "kinds": [
+          "Impact"
+        ],
+        "properties": {
+          "objectid": "impact-9bbfe7b2",
+          "name": "SUPPLY-CHAIN-CONTAMINATION",
+          "displayname": "supply-chain-contamination",
+          "impact_kind": "SupplyChainContamination",
+          "reachable": true,
+          "description": "Agent can push code to remote repositories"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "start": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "cap-8d507917",
+          "match_by": "id"
+        },
+        "kind": "HasCapability"
+      },
+      {
+        "start": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "cap-16c00448",
+          "match_by": "id"
+        },
+        "kind": "HasCapability"
+      },
+      {
+        "start": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "cap-307f3a30",
+          "match_by": "id"
+        },
+        "kind": "HasCapability"
+      },
+      {
+        "start": {
+          "value": "source-5d4890d5",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "kind": "Influences"
+      },
+      {
+        "start": {
+          "value": "source-b7dfdda0",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "kind": "Influences"
+      },
+      {
+        "start": {
+          "value": "source-eeddd6bf",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "kind": "Influences"
+      },
+      {
+        "start": {
+          "value": "source-23d05f52",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "kind": "Influences"
+      },
+      {
+        "start": {
+          "value": "source-2385cbcb",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "kind": "Influences"
+      },
+      {
+        "start": {
+          "value": "source-d869f085",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "agent-f626335e",
+          "match_by": "id"
+        },
+        "kind": "Influences"
+      },
+      {
+        "start": {
+          "value": "cap-8d507917",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "asset-d5bee0f9",
+          "match_by": "id"
+        },
+        "kind": "CanAccess"
+      },
+      {
+        "start": {
+          "value": "cap-307f3a30",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "impact-bca62f11",
+          "match_by": "id"
+        },
+        "kind": "Triggers"
+      },
+      {
+        "start": {
+          "value": "cap-16c00448",
+          "match_by": "id"
+        },
+        "end": {
+          "value": "impact-9bbfe7b2",
+          "match_by": "id"
+        },
+        "kind": "Triggers"
+      }
+    ]
+  }
+}

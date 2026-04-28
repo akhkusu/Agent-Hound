@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user"]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "security-validator.sh"}]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [{"type": "command", "command": "audit-logger.sh"}]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": ["Bash", "Read", "Write"],
+    "deny": []
+  }
+}
