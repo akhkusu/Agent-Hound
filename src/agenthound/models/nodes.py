@@ -36,7 +36,6 @@ class Agent(BaseModel):
             "id": self.objectid,
             "kinds": ["Agent"],
             "properties": {
-                "objectid": self.objectid,
                 "name": self.name.upper(),
                 "displayname": self.platform,
                 "platform": self.platform,
@@ -63,7 +62,6 @@ class Source(BaseModel):
             "id": self.objectid,
             "kinds": ["Source"],
             "properties": {
-                "objectid": self.objectid,
                 "name": self.name.upper(),
                 "displayname": self.name,
                 "source_kind": self.source_kind,
@@ -89,7 +87,6 @@ class Capability(BaseModel):
 
     def to_opengraph(self) -> dict[str, Any]:
         props: dict[str, Any] = {
-            "objectid": self.objectid,
             "name": self.name.upper(),
             "displayname": self.name,
             "cap_kind": self.cap_kind,
@@ -121,7 +118,6 @@ class Asset(BaseModel):
             "id": self.objectid,
             "kinds": ["Asset"],
             "properties": {
-                "objectid": self.objectid,
                 "name": self.name.upper(),
                 "displayname": self.name,
                 "asset_kind": self.asset_kind,
@@ -150,7 +146,6 @@ class Impact(BaseModel):
             "id": self.objectid,
             "kinds": ["Impact"],
             "properties": {
-                "objectid": self.objectid,
                 "name": self.name.upper(),
                 "displayname": self.name,
                 "impact_kind": self.impact_kind,

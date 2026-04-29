@@ -20,7 +20,7 @@ def test_agent_to_opengraph_structure():
     assert node["kinds"] == ["Agent"]
     assert node["properties"]["name"] == "CLAUDE-DESKTOP"
     assert node["properties"]["displayname"] == "Claude Desktop"
-    assert node["properties"]["objectid"] == agent.objectid
+    assert "objectid" not in node["properties"]
 
 
 def test_source_objectid_unique_per_path():

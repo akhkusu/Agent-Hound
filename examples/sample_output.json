@@ -10,7 +10,6 @@
           "Agent"
         ],
         "properties": {
-          "objectid": "agent-f626335e",
           "name": "CLAUDE-DESKTOP",
           "displayname": "Claude Desktop",
           "platform": "Claude Desktop",
@@ -23,7 +22,6 @@
           "Source"
         ],
         "properties": {
-          "objectid": "source-5d4890d5",
           "name": "CLAUDE.MD",
           "displayname": "CLAUDE.md",
           "source_kind": "AgentInstruction",
@@ -37,7 +35,6 @@
           "Source"
         ],
         "properties": {
-          "objectid": "source-b7dfdda0",
           "name": "QUERY.MD",
           "displayname": "query.md",
           "source_kind": "DocFile",
@@ -51,7 +48,6 @@
           "Source"
         ],
         "properties": {
-          "objectid": "source-eeddd6bf",
           "name": "README.MD",
           "displayname": "README.md",
           "source_kind": "DocFile",
@@ -65,7 +61,6 @@
           "Source"
         ],
         "properties": {
-          "objectid": "source-23d05f52",
           "name": "CHANGELOG.MD",
           "displayname": "CHANGELOG.md",
           "source_kind": "DocFile",
@@ -79,7 +74,6 @@
           "Source"
         ],
         "properties": {
-          "objectid": "source-2385cbcb",
           "name": "2026-04-28-AGENT-HOUND.MD",
           "displayname": "2026-04-28-agent-hound.md",
           "source_kind": "DocFile",
@@ -93,7 +87,6 @@
           "Source"
         ],
         "properties": {
-          "objectid": "source-d869f085",
           "name": "2026-04-28-AGENT-HOUND-DESIGN.MD",
           "displayname": "2026-04-28-agent-hound-design.md",
           "source_kind": "DocFile",
@@ -107,7 +100,6 @@
           "Capability"
         ],
         "properties": {
-          "objectid": "cap-8d507917",
           "name": "FILESYSTEM",
           "displayname": "filesystem",
           "cap_kind": "MCPServer",
@@ -122,7 +114,6 @@
           "Capability"
         ],
         "properties": {
-          "objectid": "cap-16c00448",
           "name": "GITHUB",
           "displayname": "github",
           "cap_kind": "MCPServer",
@@ -137,7 +128,6 @@
           "Capability"
         ],
         "properties": {
-          "objectid": "cap-307f3a30",
           "name": "REMOTE",
           "displayname": "remote",
           "cap_kind": "MCPServer",
@@ -151,7 +141,6 @@
           "Asset"
         ],
         "properties": {
-          "objectid": "asset-d5bee0f9",
           "name": "AGENT-HOUND",
           "displayname": "Agent-Hound",
           "asset_kind": "SourceCode",
@@ -166,7 +155,6 @@
           "Impact"
         ],
         "properties": {
-          "objectid": "impact-bca62f11",
           "name": "INTERNET-EXFILTRATION",
           "displayname": "internet-exfiltration",
           "impact_kind": "Exfiltration",
@@ -180,7 +168,6 @@
           "Impact"
         ],
         "properties": {
-          "objectid": "impact-9bbfe7b2",
           "name": "SUPPLY-CHAIN-CONTAMINATION",
           "displayname": "supply-chain-contamination",
           "impact_kind": "SupplyChainContamination",
