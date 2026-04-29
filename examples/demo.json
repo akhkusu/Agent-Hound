@@ -8,10 +8,10 @@
         "id": "agent-a1b2c3d4",
         "kinds": ["Agent"],
         "properties": {
-          "name": "CLAUDE-DESKTOP",
-          "displayname": "Claude Desktop",
-          "platform": "Claude Desktop",
-          "config_path": "/Users/dev/Library/Application Support/Claude/claude_desktop_config.json"
+          "name": "CLAUDE-CODE",
+          "displayname": "Claude Code",
+          "platform": "Claude Code",
+          "config_path": "/home/dev/.claude/settings.json"
         }
       },
 
