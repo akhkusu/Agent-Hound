@@ -6,7 +6,6 @@ import json
 from typing import Any
 
 from agenthound.collectors.base import CollectionResult
-from agenthound.platforms import CUSTOM_TYPES
 
 
 def build_opengraph(result: CollectionResult) -> dict[str, Any]:
@@ -26,7 +25,6 @@ def build_opengraph(result: CollectionResult) -> dict[str, Any]:
 
     return {
         "metadata": {"source_kind": "AgentHound"},
-        "custom_types": CUSTOM_TYPES,
         "graph": {"nodes": nodes, "edges": edges},
     }
 
