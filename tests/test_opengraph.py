@@ -26,10 +26,9 @@ def test_build_opengraph_has_metadata():
     assert og["metadata"]["source_kind"] == "AgentHound"
 
 
-def test_build_opengraph_has_all_five_custom_types():
+def test_build_opengraph_has_no_custom_types():
     og = build_opengraph(_make_result())
-    for kind in ("Agent", "Source", "Capability", "Asset", "Impact"):
-        assert kind in og["custom_types"]
+    assert "custom_types" not in og
 
 
 def test_build_opengraph_node_count():

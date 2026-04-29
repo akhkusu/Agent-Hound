@@ -42,11 +42,12 @@ def collect_assets(capabilities: list[Capability], workspace: Path, scope: str) 
 
     for path_str, kind in raw:
         fpath = Path(path_str)
+        name = fpath.name or fpath.resolve().name or path_str
         # writable=True only for SourceCode; other assets (SSHKey, EnvFile, etc.) are
         # marked False here even though shell-capable agents could write them.
         # The CanAccess edge covers the reachability — writable reflects file intent.
         asset = Asset(
-            name=fpath.name,
+            name=name,
             asset_kind=kind,
             path=path_str,
             readable=True,

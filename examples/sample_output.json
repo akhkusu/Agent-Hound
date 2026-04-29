@@ -152,8 +152,8 @@
         ],
         "properties": {
           "objectid": "asset-d5bee0f9",
-          "name": "",
-          "displayname": "",
+          "name": "AGENT-HOUND",
+          "displayname": "Agent-Hound",
           "asset_kind": "SourceCode",
           "path": ".",
           "readable": true,
