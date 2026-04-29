@@ -151,6 +151,27 @@
           "url": "https://api.internal.corp/mcp/sse"
         }
       },
+      {
+        "id": "cap-py000005",
+        "kinds": ["Capability"],
+        "properties": {
+          "name": "EXECUTE-PYTHON",
+          "displayname": "execute_python",
+          "cap_kind": "MCPTool",
+          "has_shell": true,
+          "command": "python3"
+        }
+      },
+      {
+        "id": "cap-br000006",
+        "kinds": ["Capability"],
+        "properties": {
+          "name": "BROWSER-CONTROL",
+          "displayname": "browser-control",
+          "cap_kind": "Permission",
+          "has_shell": false
+        }
+      },
 
       {
         "id": "asset-ssh00001",
@@ -186,6 +207,42 @@
           "path": "/home/dev/projects",
           "readable": true,
           "writable": true
+        }
+      },
+      {
+        "id": "asset-aws00004",
+        "kinds": ["Asset"],
+        "properties": {
+          "name": "AWS-CREDENTIALS",
+          "displayname": "aws/credentials",
+          "asset_kind": "AwsCredentials",
+          "path": "/home/dev/.aws/credentials",
+          "readable": true,
+          "writable": false
+        }
+      },
+      {
+        "id": "asset-gcp00005",
+        "kinds": ["Asset"],
+        "properties": {
+          "name": "GCLOUD-ADC",
+          "displayname": "application_default_credentials.json",
+          "asset_kind": "GCloudCredentials",
+          "path": "/home/dev/.config/gcloud/application_default_credentials.json",
+          "readable": true,
+          "writable": false
+        }
+      },
+      {
+        "id": "asset-k8s00006",
+        "kinds": ["Asset"],
+        "properties": {
+          "name": "KUBECONFIG",
+          "displayname": "kube/config",
+          "asset_kind": "KubeConfig",
+          "path": "/home/dev/.kube/config",
+          "readable": true,
+          "writable": false
         }
       },
 
@@ -237,17 +294,29 @@
       { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-fs000002", "match_by": "id" }, "kind": "HasCapability" },
       { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-gh000003", "match_by": "id" }, "kind": "HasCapability" },
       { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-re000004", "match_by": "id" }, "kind": "HasCapability" },
+      { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-py000005", "match_by": "id" }, "kind": "HasCapability" },
+      { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-br000006", "match_by": "id" }, "kind": "HasCapability" },
 
       { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-ssh00001", "match_by": "id" }, "kind": "CanAccess" },
       { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-env00002", "match_by": "id" }, "kind": "CanAccess" },
       { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-src00003", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-aws00004", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-gcp00005", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-k8s00006", "match_by": "id" }, "kind": "CanAccess" },
       { "start": { "value": "cap-fs000002", "match_by": "id" }, "end": { "value": "asset-env00002", "match_by": "id" }, "kind": "CanAccess" },
       { "start": { "value": "cap-fs000002", "match_by": "id" }, "end": { "value": "asset-src00003", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-fs000002", "match_by": "id" }, "end": { "value": "asset-aws00004", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-fs000002", "match_by": "id" }, "end": { "value": "asset-gcp00005", "match_by": "id" }, "kind": "CanAccess" },
       { "start": { "value": "cap-gh000003", "match_by": "id" }, "end": { "value": "asset-src00003", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-py000005", "match_by": "id" }, "end": { "value": "asset-src00003", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-py000005", "match_by": "id" }, "end": { "value": "asset-env00002", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-py000005", "match_by": "id" }, "end": { "value": "asset-aws00004", "match_by": "id" }, "kind": "CanAccess" },
 
       { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "impact-takeover",     "match_by": "id" }, "kind": "Triggers" },
+      { "start": { "value": "cap-py000005", "match_by": "id" }, "end": { "value": "impact-takeover",     "match_by": "id" }, "kind": "Triggers" },
       { "start": { "value": "cap-gh000003", "match_by": "id" }, "end": { "value": "impact-supplychain",  "match_by": "id" }, "kind": "Triggers" },
-      { "start": { "value": "cap-re000004", "match_by": "id" }, "end": { "value": "impact-exfiltration", "match_by": "id" }, "kind": "Triggers" }
+      { "start": { "value": "cap-re000004", "match_by": "id" }, "end": { "value": "impact-exfiltration", "match_by": "id" }, "kind": "Triggers" },
+      { "start": { "value": "cap-br000006", "match_by": "id" }, "end": { "value": "impact-exfiltration", "match_by": "id" }, "kind": "Triggers" }
     ]
   }
 }
