@@ -81,6 +81,10 @@ Edges: `Influences` · `HasCapability` · `CanAccess` · `Triggers`
 3. Upload the generated JSON file
 4. Query with Cypher (see `query.md`)
 
+<p align="center">
+  <img src="img/demo.png" alt="Agent-Hound graph in BloodHound"/>
+</p>
+
 ## License
 
 MIT
