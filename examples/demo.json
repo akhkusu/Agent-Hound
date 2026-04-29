@@ -27,6 +27,17 @@
         }
       },
       {
+        "id": "source-inst-02",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "AGENTS.MD",
+          "displayname": "AGENTS.md",
+          "source_kind": "AgentInstruction",
+          "path": "AGENTS.md",
+          "is_external": false
+        }
+      },
+      {
         "id": "source-doc-01",
         "kinds": ["Source"],
         "properties": {
@@ -38,14 +49,14 @@
         }
       },
       {
-        "id": "source-issue-01",
+        "id": "source-doc-02",
         "kinds": ["Source"],
         "properties": {
-          "name": "GITHUB-ISSUE-142",
-          "displayname": "github issue #142",
-          "source_kind": "GitHubIssue",
-          "path": "https://github.com/org/repo/issues/142",
-          "is_external": true
+          "name": "RUNBOOK.MD",
+          "displayname": "runbook.md",
+          "source_kind": "DocFile",
+          "path": "docs/runbook.md",
+          "is_external": false
         }
       },
 
@@ -169,9 +180,10 @@
       }
     ],
     "edges": [
-      { "start": { "value": "source-inst-01",  "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
-      { "start": { "value": "source-doc-01",   "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
-      { "start": { "value": "source-issue-01", "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-inst-01", "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-inst-02", "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-doc-01",  "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-doc-02",  "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
 
       { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-sh000001", "match_by": "id" }, "kind": "HasCapability" },
       { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-fs000002", "match_by": "id" }, "kind": "HasCapability" },
