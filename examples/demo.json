@@ -14,8 +14,9 @@
           "config_path": "/Users/dev/Library/Application Support/Claude/claude_desktop_config.json"
         }
       },
+
       {
-        "id": "source-11111111",
+        "id": "source-inst-01",
         "kinds": ["Source"],
         "properties": {
           "name": "CLAUDE.MD",
@@ -26,18 +27,29 @@
         }
       },
       {
-        "id": "source-22222222",
+        "id": "source-inst-02",
         "kinds": ["Source"],
         "properties": {
-          "name": "SYSTEM.MD",
-          "displayname": "system.md",
+          "name": "AGENTS.MD",
+          "displayname": "AGENTS.md",
           "source_kind": "AgentInstruction",
-          "path": ".claude/system.md",
+          "path": "AGENTS.md",
           "is_external": false
         }
       },
       {
-        "id": "source-33333333",
+        "id": "source-doc-01",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "README.MD",
+          "displayname": "README.md",
+          "source_kind": "DocFile",
+          "path": "README.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-doc-02",
         "kinds": ["Source"],
         "properties": {
           "name": "RUNBOOK.MD",
@@ -47,6 +59,51 @@
           "is_external": false
         }
       },
+      {
+        "id": "source-skill-01",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "DEPLOY.MD",
+          "displayname": "deploy.md",
+          "source_kind": "Skill",
+          "path": ".claude/skills/deploy.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-web-01",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "INTERNAL-WIKI-PROCEDURES",
+          "displayname": "internal-wiki/procedures",
+          "source_kind": "WebPage",
+          "path": "https://wiki.internal.corp/procedures",
+          "is_external": true
+        }
+      },
+      {
+        "id": "source-issue-01",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "GITHUB-ISSUE-142",
+          "displayname": "github issue #142",
+          "source_kind": "GitHubIssue",
+          "path": "https://github.com/org/repo/issues/142",
+          "is_external": true
+        }
+      },
+      {
+        "id": "source-slack-01",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "SLACK-DEV-OPS-THREAD",
+          "displayname": "#dev-ops thread",
+          "source_kind": "SlackThread",
+          "path": "https://yourorg.slack.com/archives/C01234/p1234567",
+          "is_external": true
+        }
+      },
+
       {
         "id": "cap-sh000001",
         "kinds": ["Capability"],
@@ -94,6 +151,7 @@
           "url": "https://api.internal.corp/mcp/sse"
         }
       },
+
       {
         "id": "asset-ssh00001",
         "kinds": ["Asset"],
@@ -130,6 +188,7 @@
           "writable": true
         }
       },
+
       {
         "id": "impact-takeover",
         "kinds": ["Impact"],
@@ -165,86 +224,30 @@
       }
     ],
     "edges": [
-      {
-        "start": { "value": "source-11111111", "match_by": "id" },
-        "end":   { "value": "agent-a1b2c3d4",  "match_by": "id" },
-        "kind": "Influences"
-      },
-      {
-        "start": { "value": "source-22222222", "match_by": "id" },
-        "end":   { "value": "agent-a1b2c3d4",  "match_by": "id" },
-        "kind": "Influences"
-      },
-      {
-        "start": { "value": "source-33333333", "match_by": "id" },
-        "end":   { "value": "agent-a1b2c3d4",  "match_by": "id" },
-        "kind": "Influences"
-      },
-      {
-        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
-        "end":   { "value": "cap-sh000001",   "match_by": "id" },
-        "kind": "HasCapability"
-      },
-      {
-        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
-        "end":   { "value": "cap-fs000002",   "match_by": "id" },
-        "kind": "HasCapability"
-      },
-      {
-        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
-        "end":   { "value": "cap-gh000003",   "match_by": "id" },
-        "kind": "HasCapability"
-      },
-      {
-        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
-        "end":   { "value": "cap-re000004",   "match_by": "id" },
-        "kind": "HasCapability"
-      },
-      {
-        "start": { "value": "cap-sh000001",  "match_by": "id" },
-        "end":   { "value": "asset-ssh00001", "match_by": "id" },
-        "kind": "CanAccess"
-      },
-      {
-        "start": { "value": "cap-sh000001",  "match_by": "id" },
-        "end":   { "value": "asset-env00002", "match_by": "id" },
-        "kind": "CanAccess"
-      },
-      {
-        "start": { "value": "cap-sh000001",  "match_by": "id" },
-        "end":   { "value": "asset-src00003", "match_by": "id" },
-        "kind": "CanAccess"
-      },
-      {
-        "start": { "value": "cap-fs000002",  "match_by": "id" },
-        "end":   { "value": "asset-env00002", "match_by": "id" },
-        "kind": "CanAccess"
-      },
-      {
-        "start": { "value": "cap-fs000002",  "match_by": "id" },
-        "end":   { "value": "asset-src00003", "match_by": "id" },
-        "kind": "CanAccess"
-      },
-      {
-        "start": { "value": "cap-gh000003",     "match_by": "id" },
-        "end":   { "value": "asset-src00003",   "match_by": "id" },
-        "kind": "CanAccess"
-      },
-      {
-        "start": { "value": "cap-sh000001",    "match_by": "id" },
-        "end":   { "value": "impact-takeover", "match_by": "id" },
-        "kind": "Triggers"
-      },
-      {
-        "start": { "value": "cap-gh000003",       "match_by": "id" },
-        "end":   { "value": "impact-supplychain", "match_by": "id" },
-        "kind": "Triggers"
-      },
-      {
-        "start": { "value": "cap-re000004",        "match_by": "id" },
-        "end":   { "value": "impact-exfiltration", "match_by": "id" },
-        "kind": "Triggers"
-      }
+      { "start": { "value": "source-inst-01",  "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-inst-02",  "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-doc-01",   "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-doc-02",   "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-skill-01", "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-web-01",   "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-issue-01", "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+      { "start": { "value": "source-slack-01", "match_by": "id" }, "end": { "value": "agent-a1b2c3d4", "match_by": "id" }, "kind": "Influences" },
+
+      { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-sh000001", "match_by": "id" }, "kind": "HasCapability" },
+      { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-fs000002", "match_by": "id" }, "kind": "HasCapability" },
+      { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-gh000003", "match_by": "id" }, "kind": "HasCapability" },
+      { "start": { "value": "agent-a1b2c3d4", "match_by": "id" }, "end": { "value": "cap-re000004", "match_by": "id" }, "kind": "HasCapability" },
+
+      { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-ssh00001", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-env00002", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "asset-src00003", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-fs000002", "match_by": "id" }, "end": { "value": "asset-env00002", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-fs000002", "match_by": "id" }, "end": { "value": "asset-src00003", "match_by": "id" }, "kind": "CanAccess" },
+      { "start": { "value": "cap-gh000003", "match_by": "id" }, "end": { "value": "asset-src00003", "match_by": "id" }, "kind": "CanAccess" },
+
+      { "start": { "value": "cap-sh000001", "match_by": "id" }, "end": { "value": "impact-takeover",     "match_by": "id" }, "kind": "Triggers" },
+      { "start": { "value": "cap-gh000003", "match_by": "id" }, "end": { "value": "impact-supplychain",  "match_by": "id" }, "kind": "Triggers" },
+      { "start": { "value": "cap-re000004", "match_by": "id" }, "end": { "value": "impact-exfiltration", "match_by": "id" }, "kind": "Triggers" }
     ]
   }
 }
