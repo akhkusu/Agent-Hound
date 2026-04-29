@@ -1,0 +1,250 @@
+{
+  "metadata": {
+    "source_kind": "AgentHound"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "agent-a1b2c3d4",
+        "kinds": ["Agent"],
+        "properties": {
+          "name": "CLAUDE-DESKTOP",
+          "displayname": "Claude Desktop",
+          "platform": "Claude Desktop",
+          "config_path": "/Users/dev/Library/Application Support/Claude/claude_desktop_config.json"
+        }
+      },
+      {
+        "id": "source-11111111",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "CLAUDE.MD",
+          "displayname": "CLAUDE.md",
+          "source_kind": "AgentInstruction",
+          "path": "CLAUDE.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-22222222",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "SYSTEM.MD",
+          "displayname": "system.md",
+          "source_kind": "AgentInstruction",
+          "path": ".claude/system.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "source-33333333",
+        "kinds": ["Source"],
+        "properties": {
+          "name": "RUNBOOK.MD",
+          "displayname": "runbook.md",
+          "source_kind": "DocFile",
+          "path": "docs/runbook.md",
+          "is_external": false
+        }
+      },
+      {
+        "id": "cap-sh000001",
+        "kinds": ["Capability"],
+        "properties": {
+          "name": "BASH-HOOK",
+          "displayname": "bash-hook",
+          "cap_kind": "ShellHook",
+          "has_shell": true,
+          "command": "bash"
+        }
+      },
+      {
+        "id": "cap-fs000002",
+        "kinds": ["Capability"],
+        "properties": {
+          "name": "FILESYSTEM",
+          "displayname": "filesystem",
+          "cap_kind": "MCPServer",
+          "has_shell": false,
+          "command": "npx -y @modelcontextprotocol/server-filesystem /home/dev",
+          "transport": "stdio"
+        }
+      },
+      {
+        "id": "cap-gh000003",
+        "kinds": ["Capability"],
+        "properties": {
+          "name": "GITHUB",
+          "displayname": "github",
+          "cap_kind": "MCPServer",
+          "has_shell": false,
+          "command": "npx -y @modelcontextprotocol/server-github",
+          "transport": "stdio"
+        }
+      },
+      {
+        "id": "cap-re000004",
+        "kinds": ["Capability"],
+        "properties": {
+          "name": "REMOTE-API",
+          "displayname": "remote-api",
+          "cap_kind": "MCPServer",
+          "has_shell": false,
+          "transport": "sse",
+          "url": "https://api.internal.corp/mcp/sse"
+        }
+      },
+      {
+        "id": "asset-ssh00001",
+        "kinds": ["Asset"],
+        "properties": {
+          "name": "ID_RSA",
+          "displayname": "id_rsa",
+          "asset_kind": "SSHKey",
+          "path": "/home/dev/.ssh/id_rsa",
+          "readable": true,
+          "writable": false
+        }
+      },
+      {
+        "id": "asset-env00002",
+        "kinds": ["Asset"],
+        "properties": {
+          "name": ".ENV",
+          "displayname": ".env",
+          "asset_kind": "EnvFile",
+          "path": "/home/dev/projects/.env",
+          "readable": true,
+          "writable": false
+        }
+      },
+      {
+        "id": "asset-src00003",
+        "kinds": ["Asset"],
+        "properties": {
+          "name": "PROJECTS",
+          "displayname": "projects",
+          "asset_kind": "SourceCode",
+          "path": "/home/dev/projects",
+          "readable": true,
+          "writable": true
+        }
+      },
+      {
+        "id": "impact-takeover",
+        "kinds": ["Impact"],
+        "properties": {
+          "name": "SYSTEM-TAKEOVER",
+          "displayname": "system-takeover",
+          "impact_kind": "SystemTakeover",
+          "reachable": true,
+          "description": "Agent can execute arbitrary commands via shell hook"
+        }
+      },
+      {
+        "id": "impact-supplychain",
+        "kinds": ["Impact"],
+        "properties": {
+          "name": "SUPPLY-CHAIN-CONTAMINATION",
+          "displayname": "supply-chain-contamination",
+          "impact_kind": "SupplyChainContamination",
+          "reachable": true,
+          "description": "Agent can push malicious commits to remote repositories"
+        }
+      },
+      {
+        "id": "impact-exfiltration",
+        "kinds": ["Impact"],
+        "properties": {
+          "name": "DATA-EXFILTRATION",
+          "displayname": "data-exfiltration",
+          "impact_kind": "Exfiltration",
+          "reachable": true,
+          "description": "Agent can leak secrets and code via remote SSE endpoint"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "start": { "value": "source-11111111", "match_by": "id" },
+        "end":   { "value": "agent-a1b2c3d4",  "match_by": "id" },
+        "kind": "Influences"
+      },
+      {
+        "start": { "value": "source-22222222", "match_by": "id" },
+        "end":   { "value": "agent-a1b2c3d4",  "match_by": "id" },
+        "kind": "Influences"
+      },
+      {
+        "start": { "value": "source-33333333", "match_by": "id" },
+        "end":   { "value": "agent-a1b2c3d4",  "match_by": "id" },
+        "kind": "Influences"
+      },
+      {
+        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
+        "end":   { "value": "cap-sh000001",   "match_by": "id" },
+        "kind": "HasCapability"
+      },
+      {
+        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
+        "end":   { "value": "cap-fs000002",   "match_by": "id" },
+        "kind": "HasCapability"
+      },
+      {
+        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
+        "end":   { "value": "cap-gh000003",   "match_by": "id" },
+        "kind": "HasCapability"
+      },
+      {
+        "start": { "value": "agent-a1b2c3d4", "match_by": "id" },
+        "end":   { "value": "cap-re000004",   "match_by": "id" },
+        "kind": "HasCapability"
+      },
+      {
+        "start": { "value": "cap-sh000001",  "match_by": "id" },
+        "end":   { "value": "asset-ssh00001", "match_by": "id" },
+        "kind": "CanAccess"
+      },
+      {
+        "start": { "value": "cap-sh000001",  "match_by": "id" },
+        "end":   { "value": "asset-env00002", "match_by": "id" },
+        "kind": "CanAccess"
+      },
+      {
+        "start": { "value": "cap-sh000001",  "match_by": "id" },
+        "end":   { "value": "asset-src00003", "match_by": "id" },
+        "kind": "CanAccess"
+      },
+      {
+        "start": { "value": "cap-fs000002",  "match_by": "id" },
+        "end":   { "value": "asset-env00002", "match_by": "id" },
+        "kind": "CanAccess"
+      },
+      {
+        "start": { "value": "cap-fs000002",  "match_by": "id" },
+        "end":   { "value": "asset-src00003", "match_by": "id" },
+        "kind": "CanAccess"
+      },
+      {
+        "start": { "value": "cap-gh000003",     "match_by": "id" },
+        "end":   { "value": "asset-src00003",   "match_by": "id" },
+        "kind": "CanAccess"
+      },
+      {
+        "start": { "value": "cap-sh000001",    "match_by": "id" },
+        "end":   { "value": "impact-takeover", "match_by": "id" },
+        "kind": "Triggers"
+      },
+      {
+        "start": { "value": "cap-gh000003",       "match_by": "id" },
+        "end":   { "value": "impact-supplychain", "match_by": "id" },
+        "kind": "Triggers"
+      },
+      {
+        "start": { "value": "cap-re000004",        "match_by": "id" },
+        "end":   { "value": "impact-exfiltration", "match_by": "id" },
+        "kind": "Triggers"
+      }
+    ]
+  }
+}
