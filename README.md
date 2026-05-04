@@ -103,7 +103,7 @@ Security Findings:
 
 ## Disclaimer
 
-**For Educational and Authorized Security Testing Only.**
+**For Authorized Security Testing Only.**
 
 Agent-Hound is designed to assist security professionals and developers in identifying potential risks in AI agent configurations. The creator assumes no liability for any misuse of this tool. Mapping an attack path does not guarantee an exploit is possible, nor does the absence of a path guarantee absolute security. Use with caution in production environments.
 
