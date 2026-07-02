@@ -20,7 +20,9 @@
   - Standalone HTML/Markdown risk reportを追加
   - 
 - [ ] public リポジトリは自分の GitHub 上で新しい repo を作る感じでよいか
-- [ ] OSS のライセンスはどうする
+- [ ] OSS のライセンスはどうする,MITでいいですかね？
+- [ ] 自分以外のContributionはどう表示しますか？
+  - Readme、License、LinkedinやSlackの投稿に書く
 
 ---
 
