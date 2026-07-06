@@ -13,16 +13,17 @@
 
 ---
 
-## 考えておくべき質問
+## 締切（2026-07-19）までにやること
 
-- [ ] Black Hat の締切（7/19）までに何を開発すべきか
-  -　GIFのデモをREADMEに追加
-  - Standalone HTML/Markdown risk reportを追加
-  - 詰めの甘いところを見つけてブラッシュアップ、特にどうやってエージェントに付与された権限を見つけるかという部分
-- [ ] public リポジトリは自分の GitHub 上で新しい repo を作る感じでよいか
-- [ ] OSS のライセンスはどうする,MITでいいですかね？
-- [ ] 自分以外のContributionはどう表示しますか？
-  - Readme、License、LinkedinやSlackの投稿に書く
+- [ ] **誤検知を減らす** 　https://github.com/akhkusu/Agent-Hound/issues/1
+- [ ] **CFP作成** 
+
 
 ---
 
+## 考えておくべき質問
+
+- [ ] public リポジトリは自分の GitHub 上で新しい repo を作る感じでよいか
+- [ ] OSS のライセンスはどうする（現状 MIT）
+
+---
