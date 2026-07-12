@@ -134,43 +134,48 @@ def resolve_profile(
     (paths, option values) and must never grant a confirmed profile, or a
     registry name appearing as a value would reintroduce false positives.
 
-    Returns (profile, index) where index is the position of the matched arg,
-    or -1 when the command itself matched (all args follow the package).
+    Returns (profile, payload_index) where payload_index is the position in
+    args where the executed package's own arguments begin — even when the
+    package was named via -p/--from, in which case the following positional is
+    the launched binary, not data.
     """
     if command is None:
         return None
     basename = os.path.basename(command)
     if basename in _REGISTRY:
-        return _REGISTRY[basename], -1
+        return _REGISTRY[basename], 0
     value_flags = _RUNNER_VALUE_FLAGS.get(basename)
     if value_flags is None:
         return None
+
+    spec_profile: CapabilityProfile | None = None
     i = 0
     while i < len(args):
         arg = args[i]
         if arg.startswith("-"):
             flag, _, inline_value = arg.partition("=")
-            if inline_value and flag in _PACKAGE_SPEC_FLAGS:
-                profile = _REGISTRY.get(_normalize_package(inline_value))
-                if profile is not None:
-                    return profile, i
+            if inline_value and flag in _PACKAGE_SPEC_FLAGS and spec_profile is None:
+                spec_profile = _REGISTRY.get(_normalize_package(inline_value))
             if not inline_value and flag in value_flags:
-                if flag in _PACKAGE_SPEC_FLAGS and i + 1 < len(args):
-                    profile = _REGISTRY.get(_normalize_package(args[i + 1]))
-                    if profile is not None:
-                        return profile, i + 1
+                if flag in _PACKAGE_SPEC_FLAGS and spec_profile is None and i + 1 < len(args):
+                    spec_profile = _REGISTRY.get(_normalize_package(args[i + 1]))
                 i += 2
                 continue
             i += 1
             continue
-        # First true positional arg is the executed package.
+        # First true positional arg: the executed package, or — after a
+        # package-spec flag — the binary that package provides.
+        if spec_profile is not None:
+            return spec_profile, i + 1
         profile = _REGISTRY.get(_normalize_package(arg))
-        return (profile, i) if profile is not None else None
+        return (profile, i + 1) if profile is not None else None
+    if spec_profile is not None:
+        return spec_profile, len(args)
     return None
 
 
-def extract_allowed_paths(args: list[str], package_index: int) -> tuple[str, ...] | None:
-    """Extract allowed directories following the package name argument.
+def extract_allowed_paths(args: list[str], payload_index: int) -> tuple[str, ...] | None:
+    """Extract allowed directories from the executed package's own arguments.
 
     Only meaningful for scoped_paths profiles (server-filesystem style, where
     every positional arg after the package is an allowed directory). Flags are
@@ -178,7 +183,7 @@ def extract_allowed_paths(args: list[str], package_index: int) -> tuple[str, ...
     config may describe another host. Returns None (scope unknown) when no
     directory args are present — e.g. an MCP-roots-only setup.
     """
-    candidates = [a for a in args[package_index + 1:] if not a.startswith("-")]
+    candidates = [a for a in args[payload_index:] if not a.startswith("-")]
     if not candidates:
         return None
     return tuple(os.path.abspath(os.path.expanduser(a)) for a in candidates)

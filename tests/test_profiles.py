@@ -10,9 +10,9 @@ from agenthound.discovery.profiles import (
 def test_resolve_known_package_in_args():
     hit = resolve_profile("npx", ["-y", "@modelcontextprotocol/server-filesystem", "/data"])
     assert hit is not None
-    profile, index = hit
+    profile, payload_index = hit
     assert profile.package == "@modelcontextprotocol/server-filesystem"
-    assert index == 1
+    assert payload_index == 2
 
 
 def test_resolve_versioned_package():
@@ -24,9 +24,9 @@ def test_resolve_versioned_package():
 def test_resolve_package_as_command():
     hit = resolve_profile("mcp-server-filesystem", ["/data"])
     assert hit is not None
-    profile, index = hit
+    profile, payload_index = hit
     assert profile.package == "@modelcontextprotocol/server-filesystem"
-    assert index == -1
+    assert payload_index == 0
 
 
 def test_resolve_unknown_returns_none():
@@ -80,16 +80,27 @@ def test_normalize_scoped_package_version():
 
 def test_extract_allowed_paths_skips_flags():
     args = ["-y", "@modelcontextprotocol/server-filesystem", "--verbose", "/a", "/b"]
-    assert extract_allowed_paths(args, 1) == ("/a", "/b")
+    assert extract_allowed_paths(args, 2) == ("/a", "/b")
 
 
 def test_extract_allowed_paths_expands_home():
     args = ["-y", "@modelcontextprotocol/server-filesystem", "~/docs"]
-    paths = extract_allowed_paths(args, 1)
+    paths = extract_allowed_paths(args, 2)
     assert paths == (os.path.expanduser("~/docs"),)
 
 
 def test_extract_allowed_paths_none_when_no_dirs():
     # MCP-roots-only setup: no directory args means scope is unknown.
     args = ["-y", "@modelcontextprotocol/server-filesystem"]
-    assert extract_allowed_paths(args, 1) is None
+    assert extract_allowed_paths(args, 2) is None
+
+
+def test_package_spec_flag_payload_excludes_launched_binary():
+    # The positional after --package is the launched binary, not a data path.
+    args = ["--package", "@modelcontextprotocol/server-filesystem",
+            "mcp-server-filesystem", "/data"]
+    hit = resolve_profile("npx", args)
+    assert hit is not None
+    profile, payload_index = hit
+    assert profile.package == "@modelcontextprotocol/server-filesystem"
+    assert extract_allowed_paths(args, payload_index) == ("/data",)

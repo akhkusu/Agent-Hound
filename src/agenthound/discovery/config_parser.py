@@ -125,7 +125,7 @@ def _build_mcp_capability(name: str, config: dict[str, Any]) -> Capability:
 
     hit = resolve_profile(command, args)
     if hit is not None:
-        profile, pkg_index = hit
+        profile, payload_index = hit
         evidence = f"package:{profile.package}"
         if profile.note:
             evidence += f" ({profile.note})"
@@ -134,7 +134,7 @@ def _build_mcp_capability(name: str, config: dict[str, Any]) -> Capability:
             fields["file_evidence"] = evidence
             fields["file_readonly"] = profile.file_readonly
             if profile.scoped_paths:
-                fields["allowed_paths"] = extract_allowed_paths(args, pkg_index)
+                fields["allowed_paths"] = extract_allowed_paths(args, payload_index)
         if profile.shell_exec != "none":
             fields["shell_exec"] = profile.shell_exec
             fields["shell_evidence"] = evidence
