@@ -18,14 +18,15 @@ def test_system_takeover_edge_from_shell_cap():
 
 
 def test_network_cap_with_internet_triggers_exfiltration():
-    cap = Capability(name="fetch-url", cap_kind="MCPServer")
+    # Detection now happens in the parser; the collector consumes the flag.
+    cap = Capability(name="fetch-url", cap_kind="MCPServer", network_send="suspected")
     result = collect_impact(capabilities=[cap], internet_reachable=True)
     kinds = {i.impact_kind for i in result.impacts}
     assert "Exfiltration" in kinds
 
 
 def test_network_cap_without_internet_no_exfiltration():
-    cap = Capability(name="fetch-url", cap_kind="MCPServer")
+    cap = Capability(name="fetch-url", cap_kind="MCPServer", network_send="suspected")
     result = collect_impact(capabilities=[cap], internet_reachable=False)
     kinds = {i.impact_kind for i in result.impacts}
     assert "Exfiltration" not in kinds
@@ -39,7 +40,7 @@ def test_git_cap_triggers_supply_chain(tmp_path):
     subprocess.run(["git", "init", str(repo)], capture_output=True)
     subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/test/repo.git"], capture_output=True)
 
-    cap = Capability(name="git-push", cap_kind="MCPServer", command="git push")
+    cap = Capability(name="git-push", cap_kind="MCPServer", command="git push", git_write="suspected")
     result = collect_impact(capabilities=[cap], internet_reachable=False, source_repos=[str(repo)])
     kinds = {i.impact_kind for i in result.impacts}
     assert "SupplyChainContamination" in kinds

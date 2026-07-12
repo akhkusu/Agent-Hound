@@ -162,3 +162,54 @@ def test_known_github_package_still_triggers_supply_chain(tmp_path):
 
     kinds = {i.impact_kind for i in result.impacts}
     assert "SupplyChainContamination" in kinds
+
+    supply_chain = next(
+        i for i in result.impacts if i.impact_kind == "SupplyChainContamination"
+    )
+    trigger = next(e for e in result.edges if e.end == supply_chain.objectid)
+    assert trigger.properties["confidence"] == "confirmed"
+    assert "package:@modelcontextprotocol/server-github" in trigger.properties["evidence"]
+
+
+# Guesses must be visually distinguishable from facts: every derived edge
+# carries confidence/evidence properties into the OpenGraph output.
+
+
+def test_scoped_can_access_edge_is_suspected_with_evidence(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / ".env").write_text("SECRET=x")
+
+    caps = _parse_servers(tmp_path, {
+        "filesystem": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+        },
+    })
+    result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
+
+    edge = next(e for e in result.edges if e.kind == "CanAccess")
+    # Args-derived scope can be replaced at runtime via MCP roots, so the
+    # scoped claim stays "suspected" even though the package is confirmed.
+    assert edge.properties["confidence"] == "suspected"
+    assert "scoped-by-args" in edge.properties["evidence"]
+    assert "package:@modelcontextprotocol/server-filesystem" in edge.properties["evidence"]
+
+    og = edge.to_opengraph()
+    assert og["properties"]["confidence"] == "suspected"
+
+
+def test_keyword_fallback_edge_is_suspected(tmp_path):
+    (tmp_path / ".env").write_text("SECRET=x")
+
+    caps = _parse_servers(tmp_path, {
+        "file-server": {
+            "command": "npx",
+            "args": ["-y", "some-unknown-file-server"],
+        },
+    })
+    result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
+
+    edge = next(e for e in result.edges if e.kind == "CanAccess")
+    assert edge.properties["confidence"] == "suspected"
+    assert edge.properties["evidence"].startswith("keyword:")

@@ -9,10 +9,6 @@ from agenthound.collectors.base import CollectionResult
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Capability, Impact
 
-_NETWORK_KEYWORDS = ("fetch", "http", "curl", "web", "browse", "url", "request", "remote")
-_GIT_KEYWORDS = ("git",)
-
-
 def check_internet() -> bool:
     """Return True if an outbound TCP connection can be established."""
     try:
@@ -24,14 +20,11 @@ def check_internet() -> bool:
         return False
 
 
-def _is_network_cap(cap: Capability) -> bool:
-    haystack = " ".join(filter(None, [cap.name.lower(), cap.command or ""])).lower()
-    return any(kw in haystack for kw in _NETWORK_KEYWORDS)
-
-
-def _is_git_cap(cap: Capability) -> bool:
-    haystack = " ".join(filter(None, [cap.name.lower(), cap.command or ""])).lower()
-    return any(kw in haystack for kw in _GIT_KEYWORDS)
+def _trigger_properties(confidence: str, evidence: str) -> dict[str, str]:
+    props = {"confidence": confidence}
+    if evidence:
+        props["evidence"] = evidence
+    return props
 
 
 def _has_git_remote(repo_path: str) -> bool:
@@ -53,7 +46,7 @@ def collect_impact(
 ) -> CollectionResult:
     result = CollectionResult()
 
-    shell_caps = [c for c in capabilities if c.has_shell or c.cap_kind == "ShellHook"]
+    shell_caps = [c for c in capabilities if c.shell_exec != "none" or c.cap_kind == "ShellHook"]
     if shell_caps:
         impact = Impact(
             name="system-takeover",
@@ -63,9 +56,12 @@ def collect_impact(
         )
         result.impacts.append(impact)
         for cap in shell_caps:
-            result.edges.append(Edge(start=cap.objectid, end=impact.objectid, kind="Triggers"))
+            result.edges.append(Edge(
+                start=cap.objectid, end=impact.objectid, kind="Triggers",
+                properties=_trigger_properties(cap.shell_exec, cap.shell_evidence),
+            ))
 
-    network_caps = [c for c in capabilities if _is_network_cap(c)]
+    network_caps = [c for c in capabilities if c.network_send != "none"]
     if network_caps and internet_reachable:
         impact = Impact(
             name="internet-exfiltration",
@@ -75,20 +71,26 @@ def collect_impact(
         )
         result.impacts.append(impact)
         for cap in network_caps:
-            result.edges.append(Edge(start=cap.objectid, end=impact.objectid, kind="Triggers"))
+            result.edges.append(Edge(
+                start=cap.objectid, end=impact.objectid, kind="Triggers",
+                properties=_trigger_properties(cap.network_send, cap.network_evidence),
+            ))
 
-    # SupplyChain only fires when git capability AND a repo with a remote is found
-    git_caps = [c for c in capabilities if _is_git_cap(c)]
+    # SupplyChain only fires when git write capability AND a repo with a remote is found
+    git_caps = [c for c in capabilities if c.git_write != "none"]
     repos_with_remote = [r for r in (source_repos or []) if _has_git_remote(r)]
     if git_caps and repos_with_remote:
         impact = Impact(
             name="supply-chain-contamination",
             impact_kind="SupplyChainContamination",
             reachable=True,
-            description="Agent can push code to remote repositories",
+            description="Agent can write commits to repositories with configured remotes",
         )
         result.impacts.append(impact)
         for cap in git_caps:
-            result.edges.append(Edge(start=cap.objectid, end=impact.objectid, kind="Triggers"))
+            result.edges.append(Edge(
+                start=cap.objectid, end=impact.objectid, kind="Triggers",
+                properties=_trigger_properties(cap.git_write, cap.git_evidence),
+            ))
 
     return result
