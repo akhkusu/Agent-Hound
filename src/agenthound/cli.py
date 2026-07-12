@@ -11,7 +11,7 @@ from rich.table import Table
 from agenthound import __version__
 from agenthound.collectors.assets import collect_assets
 from agenthound.collectors.base import CollectionResult
-from agenthound.collectors.capabilities import collect_from_config, collect_from_configs
+from agenthound.collectors.capabilities import collect_from_configs
 from agenthound.collectors.impact import check_internet, collect_impact
 from agenthound.collectors.sources import collect_sources
 from agenthound.discovery.config_parser import discover_config_files

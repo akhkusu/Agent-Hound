@@ -5,12 +5,17 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 
 SourceKind = Literal["WebPage", "GitHubIssue", "DocFile", "SlackThread", "Skill", "AgentInstruction"]
 CapabilityKind = Literal["MCPServer", "MCPTool", "ShellHook", "Permission"]
 AssetKind = Literal["SSHKey", "EnvFile", "AwsCredentials", "GCloudCredentials", "KubeConfig", "SourceCode"]
 ImpactKind = Literal["Exfiltration", "SupplyChainContamination", "SystemTakeover"]
+
+# How sure we are that a capability dimension really exists:
+# "confirmed" = derived from a fact in the config (known package, shell binary,
+# hook definition), "suspected" = name-based heuristic only.
+Confidence = Literal["none", "suspected", "confirmed"]
 
 
 def _hash_id(prefix: str, *parts: str) -> str:
@@ -79,6 +84,32 @@ class Capability(BaseModel):
     command: str | None = None
     transport: str | None = None
     has_shell: bool = False
+    # Per-dimension confidence: evidence differs per dimension (a package hit
+    # proves file access but says nothing about shell), so one flag per axis.
+    shell_exec: Confidence = "none"
+    file_access: Confidence = "none"
+    network_send: Confidence = "none"
+    git_write: Confidence = "none"
+    file_readonly: bool = False
+    # None means "no known restriction" (scope unknown), a tuple restricts
+    # file access to those directories (e.g. server-filesystem args).
+    allowed_paths: tuple[str, ...] | None = None
+    shell_evidence: str = ""
+    file_evidence: str = ""
+    network_evidence: str = ""
+    git_evidence: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_shell_fields(cls, data: Any) -> Any:
+        # has_shell predates shell_exec; keep both coherent so legacy
+        # constructors (hooks, tests) and new tri-state code agree.
+        if isinstance(data, dict):
+            if data.get("has_shell") and data.get("shell_exec", "none") == "none":
+                data["shell_exec"] = "confirmed"
+            elif data.get("shell_exec", "none") != "none":
+                data["has_shell"] = True
+        return data
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -91,11 +122,26 @@ class Capability(BaseModel):
             "displayname": self.name,
             "cap_kind": self.cap_kind,
             "has_shell": self.has_shell,
+            "shell_exec": self.shell_exec,
+            "file_access": self.file_access,
+            "network_send": self.network_send,
+            "git_write": self.git_write,
+            "file_readonly": self.file_readonly,
         }
         if self.command is not None:
             props["command"] = self.command
         if self.transport is not None:
             props["transport"] = self.transport
+        if self.allowed_paths is not None:
+            props["allowed_paths"] = list(self.allowed_paths)
+        for key, value in (
+            ("shell_evidence", self.shell_evidence),
+            ("file_evidence", self.file_evidence),
+            ("network_evidence", self.network_evidence),
+            ("git_evidence", self.git_evidence),
+        ):
+            if value:
+                props[key] = value
         return {"id": self.objectid, "kinds": ["Capability"], "properties": props}
 
 
