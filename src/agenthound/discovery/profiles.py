@@ -149,27 +149,37 @@ def resolve_profile(
         return None
 
     spec_profile: CapabilityProfile | None = None
+    spec_count = 0
+    call_flag_present = False
     i = 0
     while i < len(args):
         arg = args[i]
         if arg.startswith("-"):
             flag, _, inline_value = arg.partition("=")
-            if inline_value and flag in _PACKAGE_SPEC_FLAGS and spec_profile is None:
-                spec_profile = _REGISTRY.get(_normalize_package(inline_value))
+            if flag in ("-c", "--call"):
+                call_flag_present = True
+            if inline_value and flag in _PACKAGE_SPEC_FLAGS:
+                spec_count += 1
+                if spec_profile is None:
+                    spec_profile = _REGISTRY.get(_normalize_package(inline_value))
             if not inline_value and flag in value_flags:
-                if flag in _PACKAGE_SPEC_FLAGS and spec_profile is None and i + 1 < len(args):
-                    spec_profile = _REGISTRY.get(_normalize_package(args[i + 1]))
+                if flag in _PACKAGE_SPEC_FLAGS and i + 1 < len(args):
+                    spec_count += 1
+                    if spec_profile is None:
+                        spec_profile = _REGISTRY.get(_normalize_package(args[i + 1]))
                 i += 2
                 continue
             i += 1
             continue
-        # First true positional arg: the executed package, or — after a
-        # package-spec flag — the binary that package provides.
-        if spec_profile is not None:
+        # With -c/--call or several package specs, the executed binary cannot
+        # be tied to one package, so a spec match must not grant a confirmed
+        # profile. The positional itself may still match (e.g. an alias like
+        # "mcp-server-filesystem"), which keeps the honest cases working.
+        if spec_profile is not None and spec_count == 1 and not call_flag_present:
             return spec_profile, i + 1
         profile = _REGISTRY.get(_normalize_package(arg))
         return (profile, i + 1) if profile is not None else None
-    if spec_profile is not None:
+    if spec_profile is not None and spec_count == 1 and not call_flag_present:
         return spec_profile, len(args)
     return None
 

@@ -95,6 +95,21 @@ def test_extract_allowed_paths_none_when_no_dirs():
     assert extract_allowed_paths(args, 2) is None
 
 
+def test_spec_flag_with_call_grants_no_profile():
+    # -p only adds the package to the environment; -c runs an arbitrary
+    # command, so the package identity proves nothing about what executes.
+    assert resolve_profile(
+        "npx", ["-p", "@modelcontextprotocol/server-github", "-c", "echo ok"]
+    ) is None
+
+
+def test_multiple_package_specs_grant_no_profile():
+    assert resolve_profile(
+        "npx",
+        ["-p", "some-helper", "-p", "@modelcontextprotocol/server-github", "run-it"],
+    ) is None
+
+
 def test_package_spec_flag_payload_excludes_launched_binary():
     # The positional after --package is the launched binary, not a data path.
     args = ["--package", "@modelcontextprotocol/server-filesystem",
