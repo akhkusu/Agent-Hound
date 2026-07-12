@@ -108,8 +108,19 @@ def _normalize_package(token: str) -> str:
     return token.split("@", 1)[0]
 
 
-# Runners whose first positional argument names the package to execute.
-_PACKAGE_RUNNERS = {"npx", "uvx", "bunx"}
+# Runners whose first positional argument names the package to execute,
+# mapped to the flags that consume a following value (so an option value is
+# never mistaken for the executed package, e.g. "uvx --python 3.12 <pkg>").
+_RUNNER_VALUE_FLAGS: dict[str, set[str]] = {
+    "npx": {"-p", "--package", "-c", "--call", "--cache", "--loglevel",
+            "--registry", "--userconfig"},
+    "uvx": {"-p", "--python", "--from", "--with", "--with-requirements",
+            "--index", "--index-url", "--extra-index-url", "--constraint",
+            "--constraints", "--env-file", "--cache-dir"},
+    "bunx": set(),
+}
+# Flag values that themselves name the package being run.
+_PACKAGE_SPEC_FLAGS = {"-p", "--package", "--from"}
 
 
 def resolve_profile(
@@ -117,10 +128,11 @@ def resolve_profile(
 ) -> tuple[CapabilityProfile, int] | None:
     """Match the executed package against the registry.
 
-    Only the command basename or — for known runners like npx/uvx — the first
-    positional (non-flag) argument is considered. Later args are data (paths,
-    option values) and must never grant a confirmed profile, or a registry
-    name appearing as a value would reintroduce false positives.
+    Only the command basename or — for known runners like npx/uvx — the arg
+    that actually names the executed package (first positional, or the value
+    of a package-spec flag like --from) is considered. Other args are data
+    (paths, option values) and must never grant a confirmed profile, or a
+    registry name appearing as a value would reintroduce false positives.
 
     Returns (profile, index) where index is the position of the matched arg,
     or -1 when the command itself matched (all args follow the package).
@@ -130,13 +142,30 @@ def resolve_profile(
     basename = os.path.basename(command)
     if basename in _REGISTRY:
         return _REGISTRY[basename], -1
-    if basename not in _PACKAGE_RUNNERS:
+    value_flags = _RUNNER_VALUE_FLAGS.get(basename)
+    if value_flags is None:
         return None
-    for idx, arg in enumerate(args):
+    i = 0
+    while i < len(args):
+        arg = args[i]
         if arg.startswith("-"):
+            flag, _, inline_value = arg.partition("=")
+            if inline_value and flag in _PACKAGE_SPEC_FLAGS:
+                profile = _REGISTRY.get(_normalize_package(inline_value))
+                if profile is not None:
+                    return profile, i
+            if not inline_value and flag in value_flags:
+                if flag in _PACKAGE_SPEC_FLAGS and i + 1 < len(args):
+                    profile = _REGISTRY.get(_normalize_package(args[i + 1]))
+                    if profile is not None:
+                        return profile, i + 1
+                i += 2
+                continue
+            i += 1
             continue
+        # First true positional arg is the executed package.
         profile = _REGISTRY.get(_normalize_package(arg))
-        return (profile, idx) if profile is not None else None
+        return (profile, i) if profile is not None else None
     return None
 
 

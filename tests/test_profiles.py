@@ -49,6 +49,29 @@ def test_resolve_requires_known_runner():
     assert resolve_profile(None, []) is None
 
 
+def test_resolve_skips_runner_option_values():
+    # "3.12" is the value of --python, not the executed package.
+    hit = resolve_profile("uvx", ["--python", "3.12", "mcp-server-fetch"])
+    assert hit is not None
+    assert hit[0].package == "mcp-server-fetch"
+
+    hit = resolve_profile("npx", ["--cache", "/tmp/cache", "-y",
+                                  "@modelcontextprotocol/server-github"])
+    assert hit is not None
+    assert hit[0].package == "@modelcontextprotocol/server-github"
+
+
+def test_resolve_matches_package_spec_flag_value():
+    hit = resolve_profile("uvx", ["--from", "mcp-server-git", "mcp-server-git"])
+    assert hit is not None
+    assert hit[0].package == "mcp-server-git"
+
+
+def test_resolve_option_value_matching_registry_is_not_package():
+    # A registry name as the value of a non-package option stays data.
+    assert resolve_profile("uvx", ["--env-file", "mcp-server-git", "other-tool"]) is None
+
+
 def test_normalize_scoped_package_version():
     assert _normalize_package("@scope/name@1.2.3") == "@scope/name"
     assert _normalize_package("plain@1.0") == "plain"
