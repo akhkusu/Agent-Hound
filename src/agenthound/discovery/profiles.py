@@ -119,8 +119,6 @@ _RUNNER_VALUE_FLAGS: dict[str, set[str]] = {
             "--constraints", "--env-file", "--cache-dir"},
     "bunx": set(),
 }
-# Flag values that themselves name the package being run.
-_PACKAGE_SPEC_FLAGS = {"-p", "--package", "--from"}
 
 
 def resolve_profile(
@@ -128,16 +126,17 @@ def resolve_profile(
 ) -> tuple[CapabilityProfile, int] | None:
     """Match the executed package against the registry.
 
-    Only the command basename or — for known runners like npx/uvx — the arg
-    that actually names the executed package (first positional, or the value
-    of a package-spec flag like --from) is considered. Other args are data
-    (paths, option values) and must never grant a confirmed profile, or a
-    registry name appearing as a value would reintroduce false positives.
+    Only the command basename or — for known runners like npx/uvx — the first
+    positional argument is considered, because that is the one thing the
+    config proves is executed. Package-spec flags (npx -p, uvx --from) only
+    add a package to the environment and do not guarantee the launched binary
+    comes from it, so their values never grant a profile; the honest cases
+    still match because binary names are registered as aliases (e.g.
+    "mcp-server-filesystem"). Other args are data (paths, option values) and
+    must never grant a confirmed profile either.
 
     Returns (profile, payload_index) where payload_index is the position in
-    args where the executed package's own arguments begin — even when the
-    package was named via -p/--from, in which case the following positional is
-    the launched binary, not data.
+    args where the executed package's own arguments begin.
     """
     if command is None:
         return None
@@ -147,40 +146,19 @@ def resolve_profile(
     value_flags = _RUNNER_VALUE_FLAGS.get(basename)
     if value_flags is None:
         return None
-
-    spec_profile: CapabilityProfile | None = None
-    spec_count = 0
-    call_flag_present = False
     i = 0
     while i < len(args):
         arg = args[i]
         if arg.startswith("-"):
             flag, _, inline_value = arg.partition("=")
-            if flag in ("-c", "--call"):
-                call_flag_present = True
-            if inline_value and flag in _PACKAGE_SPEC_FLAGS:
-                spec_count += 1
-                if spec_profile is None:
-                    spec_profile = _REGISTRY.get(_normalize_package(inline_value))
             if not inline_value and flag in value_flags:
-                if flag in _PACKAGE_SPEC_FLAGS and i + 1 < len(args):
-                    spec_count += 1
-                    if spec_profile is None:
-                        spec_profile = _REGISTRY.get(_normalize_package(args[i + 1]))
                 i += 2
                 continue
             i += 1
             continue
-        # With -c/--call or several package specs, the executed binary cannot
-        # be tied to one package, so a spec match must not grant a confirmed
-        # profile. The positional itself may still match (e.g. an alias like
-        # "mcp-server-filesystem"), which keeps the honest cases working.
-        if spec_profile is not None and spec_count == 1 and not call_flag_present:
-            return spec_profile, i + 1
+        # First true positional arg is what actually executes.
         profile = _REGISTRY.get(_normalize_package(arg))
         return (profile, i + 1) if profile is not None else None
-    if spec_profile is not None and spec_count == 1 and not call_flag_present:
-        return spec_profile, len(args)
     return None
 
 

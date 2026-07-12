@@ -61,10 +61,19 @@ def test_resolve_skips_runner_option_values():
     assert hit[0].package == "@modelcontextprotocol/server-github"
 
 
-def test_resolve_matches_package_spec_flag_value():
+def test_resolve_from_flag_matches_via_positional_binary():
+    # --from only shapes the environment; the match comes from the executed
+    # positional binary, which is registered as an alias.
     hit = resolve_profile("uvx", ["--from", "mcp-server-git", "mcp-server-git"])
     assert hit is not None
     assert hit[0].package == "mcp-server-git"
+
+
+def test_spec_flag_value_alone_grants_no_profile():
+    # npx -p adds a package to the environment but "echo" is what executes.
+    assert resolve_profile(
+        "npx", ["-p", "@modelcontextprotocol/server-github", "echo", "hello"]
+    ) is None
 
 
 def test_resolve_option_value_matching_registry_is_not_package():
@@ -111,7 +120,8 @@ def test_multiple_package_specs_grant_no_profile():
 
 
 def test_package_spec_flag_payload_excludes_launched_binary():
-    # The positional after --package is the launched binary, not a data path.
+    # The positional after --package is the launched binary (matched via its
+    # alias), so the allowed-path payload starts after it.
     args = ["--package", "@modelcontextprotocol/server-filesystem",
             "mcp-server-filesystem", "/data"]
     hit = resolve_profile("npx", args)
