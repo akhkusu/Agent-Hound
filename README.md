@@ -33,6 +33,19 @@ Agent-Hound models this chain as four interconnected node types, producing a gra
 
 **Edges:** `Influences` (Source → Agent) · `HasCapability` (Agent → Capability) · `CanAccess` (Capability → Asset) · `Triggers` (Capability → Impact)
 
+### Facts vs. guesses
+
+BloodHound is built to show verified access facts, so Agent-Hound is explicit about how sure it is. Every derived `CanAccess` / `Triggers` edge carries two properties you can query in BloodHound:
+
+* `confidence` — `confirmed` when the claim comes from a fact in the config (a known MCP package such as `@modelcontextprotocol/server-filesystem`, a shell binary, a hook definition), `suspected` when it comes from a name-based heuristic only.
+* `evidence` — what produced the edge, e.g. `package:@modelcontextprotocol/server-github (push_files / create_or_update_file via GitHub API)` or `keyword:file`.
+
+Known packages are matched against a verified capability registry (`src/agenthound/discovery/profiles.py`), and `server-filesystem`-style allowed directories restrict `CanAccess` to assets inside those directories.
+
+```cypher
+MATCH p=()-[r:CanAccess|Triggers]->() WHERE r.confidence = 'confirmed' RETURN p
+```
+
 ---
 
 ## Defending Against Real-World Threats
