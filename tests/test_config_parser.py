@@ -1,10 +1,8 @@
 import json
 from pathlib import Path
 
-import pytest
 
 from agenthound.discovery.config_parser import discover_config_files, parse_config
-from agenthound.models.nodes import Capability
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -107,3 +105,14 @@ def test_discover_config_files_returns_list():
     for p in paths:
         assert isinstance(p, Path)
         assert p.exists()
+
+
+def test_shell_binary_detected_case_insensitive(tmp_path):
+    cfg = tmp_path / "claude_desktop_config.json"
+    cfg.write_text(json.dumps({
+        "mcpServers": {
+            "legacy-tool": {"command": "C:\\Windows\\System32\\PowerShell.EXE", "args": []}
+        }
+    }))
+    _, caps = parse_config(cfg)
+    assert caps[0].shell_exec == "confirmed"

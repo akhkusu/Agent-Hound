@@ -164,9 +164,12 @@ def _build_mcp_capability(name: str, config: dict[str, Any]) -> Capability:
             fields["git_evidence"] = f"keyword:{sorted(git_hits)[0]}"
 
     # A shell binary in the config is a fact regardless of profile/keywords.
-    if command and os.path.basename(command) in _SHELL_BINARIES:
+    # Normalize case and both path separator styles: a Windows-authored config
+    # (C:\...\PowerShell.EXE) may be scanned from a POSIX host.
+    binary = os.path.basename(command.replace("\\", "/")).lower() if command else ""
+    if binary in _SHELL_BINARIES:
         fields["shell_exec"] = "confirmed"
-        fields["shell_evidence"] = f"shell-binary:{os.path.basename(command)}"
+        fields["shell_evidence"] = f"shell-binary:{binary}"
 
     return Capability(
         name=name,

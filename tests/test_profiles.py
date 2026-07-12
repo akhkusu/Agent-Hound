@@ -33,6 +33,22 @@ def test_resolve_unknown_returns_none():
     assert resolve_profile("npx", ["-y", "user-profile-manager-mcp"]) is None
 
 
+def test_resolve_ignores_registry_name_in_data_args():
+    # A registry name appearing as a data value (not the executed package)
+    # must not grant a confirmed profile.
+    hit = resolve_profile(
+        "npx",
+        ["-y", "some-unknown-mcp", "--watch", "@modelcontextprotocol/server-github"],
+    )
+    assert hit is None
+
+
+def test_resolve_requires_known_runner():
+    # Non-runner commands only match via their own basename.
+    assert resolve_profile("node", ["@modelcontextprotocol/server-github"]) is None
+    assert resolve_profile(None, []) is None
+
+
 def test_normalize_scoped_package_version():
     assert _normalize_package("@scope/name@1.2.3") == "@scope/name"
     assert _normalize_package("plain@1.0") == "plain"

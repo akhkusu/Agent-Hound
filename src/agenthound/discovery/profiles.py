@@ -108,20 +108,35 @@ def _normalize_package(token: str) -> str:
     return token.split("@", 1)[0]
 
 
+# Runners whose first positional argument names the package to execute.
+_PACKAGE_RUNNERS = {"npx", "uvx", "bunx"}
+
+
 def resolve_profile(
     command: str | None, args: list[str]
 ) -> tuple[CapabilityProfile, int] | None:
-    """Match command basename or any arg against the registry.
+    """Match the executed package against the registry.
+
+    Only the command basename or — for known runners like npx/uvx — the first
+    positional (non-flag) argument is considered. Later args are data (paths,
+    option values) and must never grant a confirmed profile, or a registry
+    name appearing as a value would reintroduce false positives.
 
     Returns (profile, index) where index is the position of the matched arg,
     or -1 when the command itself matched (all args follow the package).
     """
-    if command and os.path.basename(command) in _REGISTRY:
-        return _REGISTRY[os.path.basename(command)], -1
+    if command is None:
+        return None
+    basename = os.path.basename(command)
+    if basename in _REGISTRY:
+        return _REGISTRY[basename], -1
+    if basename not in _PACKAGE_RUNNERS:
+        return None
     for idx, arg in enumerate(args):
+        if arg.startswith("-"):
+            continue
         profile = _REGISTRY.get(_normalize_package(arg))
-        if profile is not None:
-            return profile, idx
+        return (profile, idx) if profile is not None else None
     return None
 
 
