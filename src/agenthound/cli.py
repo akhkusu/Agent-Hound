@@ -110,7 +110,7 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
 
     console.print(f"[green]Output written to {output}[/green]")
     console.print(f"  Nodes: {combined.total_nodes} | Edges: {combined.total_edges}")
-    _print_findings(combined, internet)
+    _print_findings(combined)
 
 
 def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, internet: bool) -> None:
@@ -125,17 +125,30 @@ def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, 
     console.print()
 
 
-def _confidence_note(edges: list[Edge]) -> str:
+def _edge_confidence_note(edges: list[Edge]) -> str:
     confirmed = sum(1 for e in edges if e.properties.get("confidence") == "confirmed")
-    suspected = len(edges) - confirmed
-    return f"{confirmed} confirmed, {suspected} suspected"
+    return f"{confirmed} confirmed, {len(edges) - confirmed} suspected"
 
 
-def _print_findings(result: CollectionResult, internet: bool) -> None:
+def _asset_confidence_note(edges: list[Edge]) -> tuple[int, str]:
+    """Aggregate CanAccess edges per target asset, taking each asset's highest
+    confidence, so the count reflects assets rather than edges."""
+    best: dict[str, str] = {}
+    for e in edges:
+        conf = e.properties.get("confidence", "suspected")
+        if best.get(e.end) != "confirmed":
+            best[e.end] = conf
+    confirmed = sum(1 for c in best.values() if c == "confirmed")
+    return len(best), f"{confirmed} confirmed, {len(best) - confirmed} suspected"
+
+
+def _print_findings(result: CollectionResult) -> None:
     """Summarize findings from the actual generated edges, showing how much of
     each is a verified fact versus a name-based guess (confidence)."""
     findings: list[str] = []
-    ipi_sources = result.sources
+    # Only sources that actually influence an agent count as IPI entry points.
+    influenced = {e.start for e in result.edges if e.kind == "Influences"}
+    ipi_sources = [s for s in result.sources if s.objectid in influenced]
     if ipi_sources:
         findings.append(
             f"[yellow]{len(ipi_sources)} IPI source(s): "
@@ -145,10 +158,10 @@ def _print_findings(result: CollectionResult, internet: bool) -> None:
 
     can_access = [e for e in result.edges if e.kind == "CanAccess"]
     if can_access:
-        reachable_assets = len({e.end for e in can_access})
+        reachable_assets, note = _asset_confidence_note(can_access)
         findings.append(
             f"[red]{reachable_assets} sensitive asset(s) reachable via "
-            f"capabilities ({_confidence_note(can_access)})[/red]"
+            f"capabilities ({note})[/red]"
         )
 
     impact_labels = [
@@ -164,7 +177,7 @@ def _print_findings(result: CollectionResult, internet: bool) -> None:
             e for e in result.edges if e.kind == "Triggers" and e.end in impact_ids
         ]
         findings.append(
-            f"[red]{label} path detected ({_confidence_note(triggers)})[/red]"
+            f"[red]{label} path detected ({_edge_confidence_note(triggers)})[/red]"
         )
 
     if findings:

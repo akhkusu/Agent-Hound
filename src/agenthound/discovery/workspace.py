@@ -37,7 +37,9 @@ _ASSET_RULES: list[tuple[re.Pattern[str], AssetKind]] = [
     (re.compile(r"(^|[/\\])\.env(\.[^/\\]+)?$"), "EnvFile"),
     (re.compile(r"(^|[/\\])[^/\\]*\.env(\.local)?$"), "EnvFile"),
     (re.compile(r"(^|[/\\])\.aws[/\\]credentials$"), "AwsCredentials"),
-    (re.compile(r"application_default_credentials\.json$"), "GCloudCredentials"),
+    # Require the standard gcloud directory so a stray sample file with this
+    # name elsewhere is not treated as a real credential.
+    (re.compile(r"(^|[/\\])gcloud[/\\].*application_default_credentials\.json$"), "GCloudCredentials"),
     (re.compile(r"(^|[/\\])\.kube[/\\]config$"), "KubeConfig"),
 ]
 
@@ -61,8 +63,10 @@ def _looks_like_private_key(path: Path) -> bool:
     if path.name in _SSH_NON_KEY_NAMES or path.suffix == ".pub":
         return False
     try:
+        # Read a few KB, not just the first line: some keys carry leading
+        # comments / a BOM before the header.
         with open(path, "rb") as f:
-            head = f.read(64)
+            head = f.read(4096)
     except OSError:
         return True
     return b"PRIVATE KEY" in head or b"PuTTY-User-Key" in head
@@ -160,13 +164,11 @@ def find_asset_files(scope: str, workspace: Path | None = None) -> list[tuple[st
 
         for dirpath, dirs, files in os.walk(root):
             dp = Path(dirpath)
-            # Detect nested git repos before pruning
-            for d in dirs:
-                if d == ".git":
-                    repo_root = str(dp)
-                    if repo_root not in seen:
-                        results.append((repo_root, "SourceCode"))
-                        seen.add(repo_root)
+            # Detect nested git repos before pruning. A worktree / submodule has
+            # `.git` as a file, not a directory, so check both.
+            if (".git" in dirs or ".git" in files) and str(dp) not in seen:
+                results.append((str(dp), "SourceCode"))
+                seen.add(str(dp))
             dirs[:] = [d for d in dirs if d not in _EXCLUDED_DIRS]
             for fname in files:
                 fpath = dp / fname

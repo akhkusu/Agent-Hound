@@ -34,9 +34,9 @@ def _in_allowed_paths(asset_path: str, allowed_paths: tuple[str, ...]) -> bool:
 
 
 def _can_access(cap: Capability, asset: Asset) -> bool:
-    # Read-only capabilities don't get CanAccess to writable assets
-    if cap.file_readonly and cap.shell_exec == "none" and asset.writable:
-        return False
+    # CanAccess models read reachability: even a read-only file capability can
+    # read source code, so `writable` does not gate the edge (a prior version
+    # wrongly skipped writable assets for read-only caps).
     # Shell capabilities can reach any path; file scoping only constrains
     # capabilities whose access comes from a scoped file server.
     if cap.shell_exec != "none" or cap.cap_kind == "ShellHook":

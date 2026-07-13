@@ -60,3 +60,12 @@ def test_docfile_influence_is_suspected(tmp_path):
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
     edge = next(e for e in result.edges if e.kind == "Influences")
     assert edge.properties["confidence"] == "suspected"
+
+
+def test_unmapped_instruction_is_suspected(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("x")
+    from agenthound.models.nodes import Agent
+    agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edge = next(e for e in result.edges if e.kind == "Influences")
+    assert edge.properties["confidence"] == "suspected"

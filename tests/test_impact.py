@@ -87,3 +87,18 @@ def test_git_scoped_to_matching_repo_triggers(tmp_path):
     result = collect_impact(capabilities=[cap], internet_reachable=False,
                             source_repos=[str(repo)])
     assert "SupplyChainContamination" in {i.impact_kind for i in result.impacts}
+
+
+def test_git_scoped_to_subdir_still_triggers(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], capture_output=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin",
+                    "https://github.com/test/repo.git"], capture_output=True)
+    # Server pointed at a subdirectory still operates on the parent repo.
+    cap = Capability(name="git", cap_kind="MCPServer", git_write="confirmed",
+                     repo_scope=(str(repo / "src"),))
+    result = collect_impact(capabilities=[cap], internet_reachable=False,
+                            source_repos=[str(repo)])
+    assert "SupplyChainContamination" in {i.impact_kind for i in result.impacts}

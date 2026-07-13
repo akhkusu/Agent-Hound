@@ -47,3 +47,15 @@ def test_asset_path_stored(tmp_path):
 def test_empty_workspace_no_assets(tmp_path):
     result = collect_assets(capabilities=[], workspace=tmp_path, scope="workspace")
     assert result.assets == []
+
+
+def test_readonly_file_cap_can_read_source_code(tmp_path):
+    # A read-only filesystem cap can still READ a repo (writable=True asset).
+    (tmp_path / ".git").mkdir()
+    cap = Capability(name="fs", cap_kind="MCPServer", file_access="suspected",
+                     file_readonly=True)
+    result = collect_assets(capabilities=[cap], workspace=tmp_path, scope="workspace")
+    src = [a for a in result.assets if a.asset_kind == "SourceCode"]
+    assert src
+    edges = [e for e in result.edges if e.kind == "CanAccess" and e.end == src[0].objectid]
+    assert edges

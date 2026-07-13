@@ -39,8 +39,16 @@ def _git_reaches_repo(cap: Capability, repos: list[str]) -> bool:
     for repo in repos:
         resolved = Path(repo).resolve()
         for scoped in cap.repo_scope:
+            scoped_path = Path(scoped).resolve()
+            # Match either direction: the server may point at the repo root, or
+            # at a subdirectory of it (git -C repo/sub still writes the repo).
             try:
-                resolved.relative_to(Path(scoped).resolve())
+                resolved.relative_to(scoped_path)
+                return True
+            except ValueError:
+                pass
+            try:
+                scoped_path.relative_to(resolved)
                 return True
             except ValueError:
                 continue

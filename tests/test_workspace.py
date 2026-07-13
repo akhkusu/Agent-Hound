@@ -134,3 +134,23 @@ def test_deep_source_dir_file(tmp_path):
     results = find_source_files(tmp_path)
     paths = {Path(p).name for p, _ in results}
     assert "overview.md" in paths
+
+
+def test_gcloud_adc_requires_gcloud_dir(tmp_path):
+    # A stray ADC-named file outside a gcloud dir is not a credential.
+    (tmp_path / "application_default_credentials.json").write_text("{}")
+    stray = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert not any(k == "GCloudCredentials" for _, k in stray)
+    gdir = tmp_path / "gcloud"
+    gdir.mkdir()
+    (gdir / "application_default_credentials.json").write_text("{}")
+    real = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert any(k == "GCloudCredentials" for _, k in real)
+
+
+def test_worktree_git_file_detected_as_source_code(tmp_path):
+    wt = tmp_path / "worktree"
+    wt.mkdir()
+    (wt / ".git").write_text("gitdir: /somewhere/.git/worktrees/x")
+    results = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert any(k == "SourceCode" and "worktree" in p for p, k in results)

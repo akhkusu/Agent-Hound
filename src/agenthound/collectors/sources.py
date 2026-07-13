@@ -29,8 +29,9 @@ def _influence(source: Source, agent: Agent) -> tuple[bool, str, str] | None:
     if source.source_kind == "AgentInstruction":
         targets = _INSTRUCTION_TARGETS.get(source.name)
         if targets is None:
-            # Cross-tool instruction convention: any agent reads it.
-            return True, "confirmed", f"instruction:{source.name}"
+            # Unmapped instruction file (AGENTS.md, SYSTEM_PROMPT.md): commonly
+            # read across tools, but not guaranteed for this agent — a guess.
+            return True, "suspected", f"instruction:{source.name}"
         if agent.name in targets:
             return True, "confirmed", f"instruction:{source.name}"
         return None
