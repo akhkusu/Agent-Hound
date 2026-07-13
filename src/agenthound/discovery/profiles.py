@@ -162,6 +162,36 @@ def resolve_profile(
     return None
 
 
+def identity_tokens(command: str | None, args: list[str]) -> list[str]:
+    """Return the strings that identify what actually executes.
+
+    This is the command basename plus, for a known runner, the first
+    positional argument (the launched package/binary). Paths and option values
+    are deliberately excluded so that argument *data* — a "/home/git/cache"
+    path, an output directory — never seeds keyword-based capability guesses.
+    """
+    if command is None:
+        return []
+    base = os.path.basename(command.replace("\\", "/"))
+    parts = [base]
+    value_flags = _RUNNER_VALUE_FLAGS.get(base)
+    if value_flags is None:
+        return parts
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg.startswith("-"):
+            flag, _, inline_value = arg.partition("=")
+            if not inline_value and flag in value_flags:
+                i += 2
+                continue
+            i += 1
+            continue
+        parts.append(arg)
+        break
+    return parts
+
+
 def extract_allowed_paths(args: list[str], payload_index: int) -> tuple[str, ...] | None:
     """Extract allowed directories from the executed package's own arguments.
 

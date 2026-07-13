@@ -57,6 +57,11 @@ def _edge_properties(cap: Capability) -> dict[str, str]:
             # scoped claim is a strong estimate, not a verified fact.
             confidence = "suspected"
             evidence = (evidence + "; " if evidence else "") + "scoped-by-args"
+        else:
+            # No scope info at all (e.g. roots-only filesystem server): the
+            # package is confirmed but reaching *this* asset is a guess.
+            confidence = "suspected"
+            evidence = (evidence + "; " if evidence else "") + "scope-unknown"
     props: dict[str, str] = {"confidence": confidence}
     if evidence:
         props["evidence"] = evidence

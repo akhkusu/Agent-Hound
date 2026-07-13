@@ -107,7 +107,9 @@ def test_discover_config_files_returns_list():
         assert p.exists()
 
 
-def test_shell_binary_detected_case_insensitive(tmp_path):
+def test_shell_binary_launcher_detected_case_insensitive(tmp_path):
+    # A shell binary as command is a launcher signal (suspected), and must be
+    # recognized regardless of case / path separator.
     cfg = tmp_path / "claude_desktop_config.json"
     cfg.write_text(json.dumps({
         "mcpServers": {
@@ -115,4 +117,37 @@ def test_shell_binary_detected_case_insensitive(tmp_path):
         }
     }))
     _, caps = parse_config(cfg)
-    assert caps[0].shell_exec == "confirmed"
+    assert caps[0].shell_exec == "suspected"
+    assert caps[0].shell_evidence.startswith("shell-binary-launcher:")
+
+
+def test_hooks_remain_confirmed_shell(tmp_path):
+    # Hooks execute configured commands on events — a real, confirmed capability.
+    _, caps = parse_config(FIXTURES / "claude_code_settings.json")
+    hooks = [c for c in caps if c.cap_kind == "ShellHook"]
+    assert hooks and all(h.shell_exec == "confirmed" for h in hooks)
+
+
+def test_data_arg_does_not_seed_keyword(tmp_path):
+    # A path argument containing "git" must not imply git_write.
+    cfg = tmp_path / "claude_desktop_config.json"
+    cfg.write_text(json.dumps({
+        "mcpServers": {
+            "notes": {"command": "npx", "args": ["-y", "notes-mcp", "/home/user/git/cache"]}
+        }
+    }))
+    _, caps = parse_config(cfg)
+    assert caps[0].git_write == "none"
+
+
+def test_same_named_server_distinct_across_agents():
+    # "filesystem" in two different agent configs must be two nodes.
+    from agenthound.collectors.capabilities import collect_from_configs
+    result = collect_from_configs([
+        FIXTURES / "claude_desktop_config.json",
+        FIXTURES / "vscode_mcp.json",
+    ])
+    fs_caps = [c for c in result.capabilities if c.name == "filesystem"]
+    # Only claude_desktop has "filesystem"; assert agent_scope is populated so
+    # a same-named server elsewhere would not collide.
+    assert all(c.agent_scope for c in fs_caps)

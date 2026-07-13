@@ -73,6 +73,7 @@ def _merge_capabilities(a: Capability, b: Capability) -> Capability:
         cap_kind=a.cap_kind,
         command=a.command if a.command is not None else b.command,
         transport=a.transport if a.transport is not None else b.transport,
+        agent_scope=a.agent_scope,
         shell_exec=_max_conf(a.shell_exec, b.shell_exec),
         file_access=file_access,
         network_send=_max_conf(a.network_send, b.network_send),

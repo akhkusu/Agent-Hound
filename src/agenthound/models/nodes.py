@@ -84,6 +84,11 @@ class Capability(BaseModel):
     command: str | None = None
     transport: str | None = None
     has_shell: bool = False
+    # Identity of the owning agent (its config path). Included in objectid so
+    # that a "filesystem" server in two different agents stays two distinct
+    # nodes — otherwise their scopes/capabilities would cross-contaminate.
+    # Empty for directly-constructed caps, keeping legacy objectids stable.
+    agent_scope: str = ""
     # Per-dimension confidence: evidence differs per dimension (a package hit
     # proves file access but says nothing about shell), so one flag per axis.
     shell_exec: Confidence = "none"
@@ -114,7 +119,7 @@ class Capability(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def objectid(self) -> str:
-        return _hash_id("cap", self.name, self.cap_kind)
+        return _hash_id("cap", self.name, self.cap_kind, self.agent_scope)
 
     def to_opengraph(self) -> dict[str, Any]:
         props: dict[str, Any] = {
