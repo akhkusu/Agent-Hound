@@ -99,6 +99,21 @@ def _asset_kind(path: Path) -> AssetKind | None:
     return None
 
 
+def _is_git_repo_root(path: Path) -> bool:
+    """True if `path` holds a git repo: a `.git` directory, or a `.git` file
+    whose first line is a `gitdir:` pointer (worktree / submodule)."""
+    git = path / ".git"
+    if git.is_dir():
+        return True
+    if git.is_file():
+        try:
+            with open(git, "rb") as f:
+                return f.read(8).startswith(b"gitdir:")
+        except OSError:
+            return False
+    return False
+
+
 def _in_source_scope(root_path: Path, workspace: Path) -> bool:
     """True if root_path is workspace root or under a source directory."""
     if root_path == workspace:
@@ -156,7 +171,7 @@ def find_asset_files(scope: str, workspace: Path | None = None) -> list[tuple[st
 
     def _scan(root: Path) -> None:
         # Check the root itself for git repo
-        if (root / ".git").exists():
+        if _is_git_repo_root(root):
             key = str(root)
             if key not in seen:
                 results.append((key, "SourceCode"))
@@ -165,8 +180,8 @@ def find_asset_files(scope: str, workspace: Path | None = None) -> list[tuple[st
         for dirpath, dirs, files in os.walk(root):
             dp = Path(dirpath)
             # Detect nested git repos before pruning. A worktree / submodule has
-            # `.git` as a file, not a directory, so check both.
-            if (".git" in dirs or ".git" in files) and str(dp) not in seen:
+            # `.git` as a file (a `gitdir:` pointer), not a directory.
+            if _is_git_repo_root(dp) and str(dp) not in seen:
                 results.append((str(dp), "SourceCode"))
                 seen.add(str(dp))
             dirs[:] = [d for d in dirs if d not in _EXCLUDED_DIRS]

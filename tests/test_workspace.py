@@ -154,3 +154,12 @@ def test_worktree_git_file_detected_as_source_code(tmp_path):
     (wt / ".git").write_text("gitdir: /somewhere/.git/worktrees/x")
     results = find_asset_files(scope="workspace", workspace=tmp_path)
     assert any(k == "SourceCode" and "worktree" in p for p, k in results)
+
+
+def test_bogus_git_file_not_source_code(tmp_path):
+    # A .git file that is not a gitdir pointer must not count as a repo.
+    d = tmp_path / "notarepo"
+    d.mkdir()
+    (d / ".git").write_text("just some text")
+    results = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert not any(k == "SourceCode" and "notarepo" in p for p, k in results)
