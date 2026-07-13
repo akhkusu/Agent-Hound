@@ -40,7 +40,7 @@ def test_fp1_filesystem_scoped_to_allowed_directory(tmp_path):
     (docs / ".env").write_text("SECRET=in-scope")
     ssh = tmp_path / ".ssh"
     ssh.mkdir()
-    (ssh / "id_rsa").write_text("out-of-scope key")
+    (ssh / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n")
 
     caps = _parse_servers(tmp_path, {
         "filesystem": {
