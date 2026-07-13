@@ -59,6 +59,30 @@ def test_fp1_filesystem_scoped_to_allowed_directory(tmp_path):
     assert str(ssh / "id_rsa") not in reachable
 
 
+def test_fp1_windows_npx_shim_keeps_filesystem_scope(tmp_path):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / ".env").write_text("SECRET=in-scope")
+    ssh = tmp_path / ".ssh"
+    ssh.mkdir()
+    (ssh / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n")
+
+    caps = _parse_servers(tmp_path, {
+        "filesystem": {
+            "command": "npx.cmd",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+        },
+    })
+    result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
+    reachable = {
+        next(a.path for a in result.assets if a.objectid == e.end)
+        for e in result.edges
+        if e.kind == "CanAccess"
+    }
+    assert str(docs / ".env") in reachable
+    assert str(ssh / "id_rsa") not in reachable
+
+
 # FP-2: a server merely containing "file" in its name is not a filesystem tool
 
 

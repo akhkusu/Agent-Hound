@@ -14,19 +14,47 @@ from agenthound.models.nodes import Agent, Source
 # file (AGENTS.md, SYSTEM_PROMPT.md) is a cross-tool convention read by any
 # agent. This stops e.g. .cursorrules from being shown as influencing Claude.
 _INSTRUCTION_TARGETS: dict[str, set[str]] = {
-    "CLAUDE.md": {"claude-desktop", "claude-code"},
     ".cursorrules": {"cursor"},
-    "COPILOT-INSTRUCTIONS.md": {"vscode-copilot"},
     "GEMINI.md": {"gemini"},
 }
 
 
-def _influence(source: Source, agent: Agent) -> tuple[bool, str, str] | None:
+def _relative_parts(source: Source, workspace: Path) -> tuple[str, ...] | None:
+    try:
+        return Path(source.path).resolve().relative_to(workspace.resolve()).parts
+    except (OSError, ValueError):
+        return None
+
+
+def _influence(
+    source: Source, agent: Agent, workspace: Path
+) -> tuple[bool, str, str] | None:
     """Decide whether `source` influences `agent`, with confidence/evidence.
 
     Returns (connect, confidence, evidence) or None when there is no edge.
     """
     if source.source_kind == "AgentInstruction":
+        rel = _relative_parts(source, workspace)
+        if rel == (".github", "copilot-instructions.md"):
+            if agent.name == "vscode-copilot":
+                return True, "confirmed", "instruction:.github/copilot-instructions.md"
+            return None
+        if source.name == "CLAUDE.md":
+            # Claude Code loads the project-root file automatically; nested
+            # files are loaded only when it works in that subtree. VS Code
+            # supports the root and .claude compatibility locations.
+            if agent.name == "claude-code" and rel == ("CLAUDE.md",):
+                return True, "confirmed", "instruction:CLAUDE.md"
+            if agent.name == "vscode-copilot" and rel in {
+                ("CLAUDE.md",), (".claude", "CLAUDE.md")
+            }:
+                return True, "confirmed", f"instruction:{'/'.join(rel)}"
+            return True, "suspected", f"instruction:{source.name}"
+        if source.name == "AGENTS.md" and agent.name == "vscode-copilot":
+            # Root AGENTS.md is always-on in VS Code; nested support is
+            # optional/experimental and therefore remains suspected.
+            confidence = "confirmed" if rel == ("AGENTS.md",) else "suspected"
+            return True, confidence, f"instruction:{source.name}"
         targets = _INSTRUCTION_TARGETS.get(source.name)
         if targets is None:
             # Unmapped instruction file (AGENTS.md, SYSTEM_PROMPT.md): commonly
@@ -60,7 +88,7 @@ def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResu
         if source.objectid not in seen:
             result.sources.append(source)
             seen.add(source.objectid)
-        decision = _influence(source, agent)
+        decision = _influence(source, agent, workspace)
         if decision is not None:
             _, confidence, evidence = decision
             result.edges.append(Edge(

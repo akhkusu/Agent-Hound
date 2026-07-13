@@ -124,6 +124,20 @@ _RUNNER_VALUE_FLAGS: dict[str, set[str]] = {
 }
 
 
+def _executable_basename(command: str) -> str:
+    """Return a cross-platform executable name suitable for matching.
+
+    MCP configs are often shared across hosts, and Windows commonly records
+    shim executables as ``npx.cmd`` or ``uvx.exe``.  Normalize both path
+    separator styles and remove executable suffixes before registry lookup.
+    """
+    basename = os.path.basename(command.replace("\\", "/")).lower()
+    for suffix in (".cmd", ".exe", ".bat"):
+        if basename.endswith(suffix):
+            return basename[: -len(suffix)]
+    return basename
+
+
 def resolve_profile(
     command: str | None, args: list[str]
 ) -> tuple[CapabilityProfile, int] | None:
@@ -143,7 +157,7 @@ def resolve_profile(
     """
     if command is None:
         return None
-    basename = os.path.basename(command)
+    basename = _executable_basename(command)
     if basename in _REGISTRY:
         return _REGISTRY[basename], 0
     value_flags = _RUNNER_VALUE_FLAGS.get(basename)
@@ -175,7 +189,7 @@ def identity_tokens(command: str | None, args: list[str]) -> list[str]:
     """
     if command is None:
         return []
-    base = os.path.basename(command.replace("\\", "/"))
+    base = _executable_basename(command)
     parts = [base]
     value_flags = _RUNNER_VALUE_FLAGS.get(base)
     if value_flags is None:

@@ -136,6 +136,15 @@ def test_deep_source_dir_file(tmp_path):
     assert "overview.md" in paths
 
 
+def test_vscode_copilot_instruction_in_hidden_github_dir(tmp_path):
+    github = tmp_path / ".github"
+    github.mkdir()
+    instruction = github / "copilot-instructions.md"
+    instruction.write_text("rules")
+    results = find_source_files(tmp_path)
+    assert (str(instruction), "AgentInstruction") in results
+
+
 def test_gcloud_adc_requires_gcloud_dir(tmp_path):
     # A stray ADC-named file outside a gcloud dir is not a credential.
     (tmp_path / "application_default_credentials.json").write_text("{}")

@@ -69,3 +69,40 @@ def test_unmapped_instruction_is_suspected(tmp_path):
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
     edge = next(e for e in result.edges if e.kind == "Influences")
     assert edge.properties["confidence"] == "suspected"
+
+
+def test_vscode_standard_copilot_instruction_is_confirmed(tmp_path):
+    github = tmp_path / ".github"
+    github.mkdir()
+    (github / "copilot-instructions.md").write_text("rules")
+    agent = Agent(name="vscode-copilot", platform="VS Code Copilot", config_path="/p")
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edge = next(e for e in result.edges if e.kind == "Influences")
+    assert edge.properties["confidence"] == "confirmed"
+    assert ".github/copilot-instructions.md" in edge.properties["evidence"]
+
+
+def test_nested_claude_instruction_is_only_suspected(tmp_path):
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+    (subdir / "CLAUDE.md").write_text("rules")
+    agent = Agent(name="claude-code", platform="Claude Code", config_path="/p")
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edge = next(e for e in result.edges if e.kind == "Influences")
+    assert edge.properties["confidence"] == "suspected"
+
+
+def test_root_claude_instruction_is_confirmed_for_claude_code(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("rules")
+    agent = Agent(name="claude-code", platform="Claude Code", config_path="/p")
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edge = next(e for e in result.edges if e.kind == "Influences")
+    assert edge.properties["confidence"] == "confirmed"
+
+
+def test_claude_desktop_does_not_confirm_claude_code_instruction(tmp_path):
+    (tmp_path / "CLAUDE.md").write_text("rules")
+    agent = Agent(name="claude-desktop", platform="Claude Desktop", config_path="/p")
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edge = next(e for e in result.edges if e.kind == "Influences")
+    assert edge.properties["confidence"] == "suspected"

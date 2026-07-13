@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from agenthound.collectors.base import CollectionResult
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Agent, Asset, Capability, Impact, Source

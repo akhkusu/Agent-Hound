@@ -15,6 +15,16 @@ def test_resolve_known_package_in_args():
     assert payload_index == 2
 
 
+def test_resolve_windows_runner_shim():
+    hit = resolve_profile(
+        "C:\\Program Files\\nodejs\\npx.CMD",
+        ["-y", "@modelcontextprotocol/server-filesystem", "/data"],
+    )
+    assert hit is not None
+    assert hit[0].package == "@modelcontextprotocol/server-filesystem"
+    assert hit[1] == 2
+
+
 def test_resolve_versioned_package():
     hit = resolve_profile("npx", ["-y", "@modelcontextprotocol/server-github@2025.1.1"])
     assert hit is not None

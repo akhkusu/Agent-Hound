@@ -9,9 +9,11 @@ from pathlib import Path
 from agenthound.models.nodes import AssetKind, SourceKind
 
 _AGENT_INSTRUCTION_NAMES = {
-    "CLAUDE.md", "AGENTS.md", "GEMINI.md", "COPILOT-INSTRUCTIONS.md",
-    ".cursorrules", "SYSTEM_PROMPT.md",
+    "CLAUDE.md", "AGENTS.md", "GEMINI.md", ".cursorrules",
+    "SYSTEM_PROMPT.md",
 }
+
+_COPILOT_INSTRUCTION_PATH = (".github", "copilot-instructions.md")
 
 _DOC_EXTENSIONS = {".md", ".txt", ".html", ".rst", ".xml"}
 
@@ -87,6 +89,16 @@ def _source_kind(path: Path) -> SourceKind | None:
     return None
 
 
+def _is_agent_instruction(path: Path, workspace: Path) -> bool:
+    """Return whether path is a recognized always-on instruction file."""
+    if path.name in _AGENT_INSTRUCTION_NAMES:
+        return True
+    try:
+        return path.relative_to(workspace).parts == _COPILOT_INSTRUCTION_PATH
+    except ValueError:
+        return False
+
+
 def _asset_kind(path: Path) -> AssetKind | None:
     path_str = str(path)
     for pattern, kind in _ASSET_RULES:
@@ -136,8 +148,8 @@ def find_source_files(workspace: Path) -> list[tuple[str, SourceKind]]:
         dirs[:] = [d for d in dirs if d not in _EXCLUDED_DIRS]
         root_path = Path(root)
         for fname in files:
-            if fname in _AGENT_INSTRUCTION_NAMES:
-                fpath = root_path / fname
+            fpath = root_path / fname
+            if _is_agent_instruction(fpath, workspace):
                 key = str(fpath)
                 if key not in seen:
                     results.append((key, "AgentInstruction"))
@@ -150,7 +162,7 @@ def find_source_files(workspace: Path) -> list[tuple[str, SourceKind]]:
         in_source_dir = root_path == workspace or _in_source_scope(root_path, workspace)
         for fname in files:
             fpath = root_path / fname
-            if fpath.name in _AGENT_INSTRUCTION_NAMES:
+            if _is_agent_instruction(fpath, workspace):
                 continue  # already handled in pass 1
             if in_source_dir and fpath.suffix in _DOC_EXTENSIONS:
                 key = str(fpath)
