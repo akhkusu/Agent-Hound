@@ -1,5 +1,3 @@
-from pathlib import Path
-import pytest
 from agenthound.collectors.sources import collect_sources
 from agenthound.models.nodes import Agent
 
@@ -37,3 +35,28 @@ def test_collect_sources_empty_workspace(tmp_path):
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
     assert result.sources == []
     assert result.edges == []
+
+
+def test_cursorrules_does_not_influence_claude(tmp_path):
+    (tmp_path / ".cursorrules").write_text("rules")
+    agent = Agent(name="claude-desktop", platform="Claude Desktop", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    # The source node exists, but there is no Influences edge to Claude.
+    assert any(s.name == ".cursorrules" for s in result.sources)
+    assert [e for e in result.edges if e.kind == "Influences"] == []
+
+
+def test_cursorrules_influences_cursor_confirmed(tmp_path):
+    (tmp_path / ".cursorrules").write_text("rules")
+    agent = Agent(name="cursor", platform="Cursor", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edge = next(e for e in result.edges if e.kind == "Influences")
+    assert edge.properties["confidence"] == "confirmed"
+
+
+def test_docfile_influence_is_suspected(tmp_path):
+    (tmp_path / "README.md").write_text("# readme")
+    agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+    edge = next(e for e in result.edges if e.kind == "Influences")
+    assert edge.properties["confidence"] == "suspected"

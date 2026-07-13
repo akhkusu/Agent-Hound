@@ -129,3 +129,23 @@ def test_package_spec_flag_payload_excludes_launched_binary():
     profile, payload_index = hit
     assert profile.package == "@modelcontextprotocol/server-filesystem"
     assert extract_allowed_paths(args, payload_index) == ("/data",)
+
+
+def test_extract_repo_scope_from_flag():
+    from agenthound.discovery.profiles import extract_repo_scope
+    args = ["mcp-server-git", "--repository", "/srv/repo"]
+    assert extract_repo_scope(args, 1) == ("/srv/repo",)
+
+
+def test_extract_repo_scope_none_when_absent():
+    from agenthound.discovery.profiles import extract_repo_scope
+    assert extract_repo_scope(["mcp-server-git"], 1) is None
+
+
+def test_server_git_captures_repo_scope():
+    from agenthound.discovery.config_parser import _build_mcp_capability
+    cap = _build_mcp_capability("git", {
+        "command": "uvx", "args": ["mcp-server-git", "--repository", "/srv/repo"]
+    }, agent_scope="a")
+    assert cap.git_write == "confirmed"
+    assert cap.repo_scope == ("/srv/repo",)

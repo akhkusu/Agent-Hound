@@ -99,6 +99,9 @@ class Capability(BaseModel):
     # None means "no known restriction" (scope unknown), a tuple restricts
     # file access to those directories (e.g. server-filesystem args).
     allowed_paths: tuple[str, ...] | None = None
+    # For git capabilities: the repositories the server operates on (e.g.
+    # server-git --repository). None means unknown / any repo.
+    repo_scope: tuple[str, ...] | None = None
     shell_evidence: str = ""
     file_evidence: str = ""
     network_evidence: str = ""
@@ -139,6 +142,8 @@ class Capability(BaseModel):
             props["transport"] = self.transport
         if self.allowed_paths is not None:
             props["allowed_paths"] = list(self.allowed_paths)
+        if self.repo_scope is not None:
+            props["repo_scope"] = list(self.repo_scope)
         for key, value in (
             ("shell_evidence", self.shell_evidence),
             ("file_evidence", self.file_evidence),

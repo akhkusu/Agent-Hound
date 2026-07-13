@@ -1,5 +1,3 @@
-from pathlib import Path
-import pytest
 from agenthound.collectors.assets import collect_assets
 from agenthound.models.nodes import Capability
 
@@ -14,7 +12,7 @@ def test_collect_assets_finds_env_file(tmp_path):
 def test_collect_assets_finds_ssh_key(tmp_path):
     ssh = tmp_path / ".ssh"
     ssh.mkdir()
-    (ssh / "id_rsa").write_text("key")
+    (ssh / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n")
     result = collect_assets(capabilities=[], workspace=tmp_path, scope="workspace")
     kinds = {a.asset_kind for a in result.assets}
     assert "SSHKey" in kinds

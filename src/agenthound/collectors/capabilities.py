@@ -61,6 +61,15 @@ def _merge_file_dimension(
     return _min_conf(ca, cb), union, readonly
 
 
+def _merge_repo_scope(
+    a: tuple[str, ...] | None, b: tuple[str, ...] | None
+) -> tuple[str, ...] | None:
+    # Widen access: if either side can reach any repo (None), so can the merge.
+    if a is None or b is None:
+        return None
+    return tuple(sorted(set(a) | set(b)))
+
+
 def _merge_capabilities(a: Capability, b: Capability) -> Capability:
     """Merge two capabilities that share an objectid (same name + kind).
 
@@ -80,6 +89,7 @@ def _merge_capabilities(a: Capability, b: Capability) -> Capability:
         git_write=_max_conf(a.git_write, b.git_write),
         file_readonly=file_readonly,
         allowed_paths=allowed_paths,
+        repo_scope=_merge_repo_scope(a.repo_scope, b.repo_scope),
         shell_evidence=_merge_evidence(a.shell_evidence, b.shell_evidence),
         file_evidence=_merge_evidence(a.file_evidence, b.file_evidence),
         network_evidence=_merge_evidence(a.network_evidence, b.network_evidence),

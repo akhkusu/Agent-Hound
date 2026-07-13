@@ -30,6 +30,8 @@ class CapabilityProfile:
     shell_exec: Confidence = "none"
     network_send: Confidence = "none"
     git_write: Confidence = "none"
+    # Extract the target repository from args (server-git --repository style).
+    repo_scoped: bool = False
     note: str = ""
     aliases: tuple[str, ...] = field(default=())
 
@@ -53,6 +55,7 @@ _PROFILES = [
     CapabilityProfile(
         package="mcp-server-git",
         git_write="confirmed",
+        repo_scoped=True,
         note="local commits only (no push tool)",
         aliases=("@modelcontextprotocol/server-git",),
     ),
@@ -205,3 +208,29 @@ def extract_allowed_paths(args: list[str], payload_index: int) -> tuple[str, ...
     if not candidates:
         return None
     return tuple(os.path.abspath(os.path.expanduser(a)) for a in candidates)
+
+
+_REPO_FLAGS = {"--repository", "--repo", "-r"}
+
+
+def extract_repo_scope(args: list[str], payload_index: int) -> tuple[str, ...] | None:
+    """Extract the git repository the server targets (server-git --repository).
+
+    Looks at the package's own args for a --repository value or a lone
+    positional path. Returns None (any/unknown repo) when none is given.
+    """
+    payload = args[payload_index:]
+    i = 0
+    while i < len(payload):
+        arg = payload[i]
+        flag, _, inline_value = arg.partition("=")
+        if flag in _REPO_FLAGS:
+            value = inline_value or (payload[i + 1] if i + 1 < len(payload) else "")
+            if value:
+                return (os.path.abspath(os.path.expanduser(value)),)
+            i += 1 if inline_value else 2
+            continue
+        if not arg.startswith("-"):
+            return (os.path.abspath(os.path.expanduser(arg)),)
+        i += 1
+    return None

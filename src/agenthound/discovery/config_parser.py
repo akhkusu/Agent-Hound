@@ -11,6 +11,7 @@ from typing import Any
 
 from agenthound.discovery.profiles import (
     extract_allowed_paths,
+    extract_repo_scope,
     identity_tokens,
     resolve_profile,
 )
@@ -149,6 +150,8 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
         if profile.git_write != "none":
             fields["git_write"] = profile.git_write
             fields["git_evidence"] = evidence
+            if profile.repo_scoped:
+                fields["repo_scope"] = extract_repo_scope(args, payload_index)
     else:
         # Only the server name and what actually executes (command basename +
         # the launched package) seed keyword detection. Path/option-value args

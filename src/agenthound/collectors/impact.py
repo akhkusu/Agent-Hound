@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import socket
 import subprocess
+from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
 from agenthound.models.edges import Edge
@@ -25,6 +26,25 @@ def _trigger_properties(confidence: str, evidence: str) -> dict[str, str]:
     if evidence:
         props["evidence"] = evidence
     return props
+
+
+def _git_reaches_repo(cap: Capability, repos: list[str]) -> bool:
+    """True if the git cap can operate on one of the given repos.
+
+    A cap with no repo scope (None) can target any repo; a scoped cap only
+    reaches repos inside its configured repositories.
+    """
+    if cap.repo_scope is None:
+        return True
+    for repo in repos:
+        resolved = Path(repo).resolve()
+        for scoped in cap.repo_scope:
+            try:
+                resolved.relative_to(Path(scoped).resolve())
+                return True
+            except ValueError:
+                continue
+    return False
 
 
 def _has_git_remote(repo_path: str) -> bool:
@@ -76,9 +96,14 @@ def collect_impact(
                 properties=_trigger_properties(cap.network_send, cap.network_evidence),
             ))
 
-    # SupplyChain only fires when git write capability AND a repo with a remote is found
-    git_caps = [c for c in capabilities if c.git_write != "none"]
+    # SupplyChain fires only for git-write caps that can actually reach a
+    # repo with a remote — a git server scoped to /tmp/scratch does not
+    # contaminate an unrelated remote-backed repo elsewhere.
     repos_with_remote = [r for r in (source_repos or []) if _has_git_remote(r)]
+    git_caps = [
+        c for c in capabilities
+        if c.git_write != "none" and _git_reaches_repo(c, repos_with_remote)
+    ]
     if git_caps and repos_with_remote:
         impact = Impact(
             name="supply-chain-contamination",
