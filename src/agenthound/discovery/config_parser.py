@@ -9,10 +9,42 @@ import re
 from pathlib import Path
 from typing import Any
 
-from agenthound.models.nodes import Capability, Agent
+from agenthound.discovery.profiles import (
+    extract_allowed_paths,
+    extract_repo_scope,
+    identity_tokens,
+    resolve_profile,
+)
+from agenthound.models.nodes import Agent, Capability
 
-_SHELL_KEYWORDS = ("shell", "bash", "execute", "terminal", "command", "run", "exec")
-_SHELL_PATTERN = re.compile(r'\b(' + '|'.join(_SHELL_KEYWORDS) + r')\b')
+# Direct facts: the configured binary itself is a shell.
+_SHELL_BINARIES = {
+    "bash", "sh", "zsh", "dash", "fish",
+    "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh",
+}
+
+# Keyword fallback for servers not in the package registry. Tokens must match
+# exactly (name split on non-alphanumerics), so "profile" never implies file
+# access and "command-palette" never implies a shell. Deliberately excludes
+# generic words (command, run, web, url, remote, ...) — those produced the
+# false positives listed in issue #1. Keyword hits are only ever "suspected".
+_SHELL_TOKENS = {"shell", "bash", "zsh", "terminal", "exec", "execute"}
+_FILE_TOKENS = {"filesystem", "file", "files", "fs"}
+_READONLY_LEAD_TOKENS = {"read", "list", "search", "get", "view"}
+_NETWORK_TOKENS = {
+    "fetch", "http", "https", "curl", "browser", "puppeteer", "playwright",
+    "download", "upload",
+}
+_GIT_TOKENS = {"git"}
+
+_TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
+
+
+def _tokenize(*parts: str) -> set[str]:
+    tokens: set[str] = set()
+    for part in parts:
+        tokens.update(t for t in _TOKEN_SPLIT.split(part.lower()) if t)
+    return tokens
 
 _CLAUDE_DESKTOP_PATH = (
     Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
@@ -77,32 +109,99 @@ def _detect_agent(config_path: Path) -> tuple[str, str]:
     return "unknown-agent", "Unknown Agent"
 
 
-def _is_shell_server(name: str, command: str | None, args: list[str]) -> bool:
-    haystack = " ".join(filter(None, [name.lower(), command or "", *(str(a) for a in args if a is not None)])).lower()
-    return bool(_SHELL_PATTERN.search(haystack))
+def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -> Capability:
+    """Derive capability flags in three layers, most reliable first.
+
+    1. Known package profile (confirmed) — the package identity is a fact
+       stated in the config.
+    2. Direct config facts (suspected) — a shell binary as the command likely
+       just launches the server, so it is a weak signal, not proof.
+    3. Name-token keywords (suspected) — only when no profile matched, so a
+       benign known package is never re-guessed by its name.
+    """
+    url = config.get("url")
+    command = config.get("command")
+    args = [str(a) for a in config.get("args", []) if a is not None]
+    transport = "sse" if url else "stdio"
+    cmd_str: str | None = None
+    if command:
+        cmd_str = command + (" " + " ".join(args) if args else "")
+
+    fields: dict[str, Any] = {}
+
+    hit = resolve_profile(command, args)
+    if hit is not None:
+        profile, payload_index = hit
+        evidence = f"package:{profile.package}"
+        if profile.note:
+            evidence += f" ({profile.note})"
+        if profile.file_access != "none":
+            fields["file_access"] = profile.file_access
+            fields["file_evidence"] = evidence
+            fields["file_readonly"] = profile.file_readonly
+            if profile.scoped_paths:
+                fields["allowed_paths"] = extract_allowed_paths(args, payload_index)
+        if profile.shell_exec != "none":
+            fields["shell_exec"] = profile.shell_exec
+            fields["shell_evidence"] = evidence
+        if profile.network_send != "none":
+            fields["network_send"] = profile.network_send
+            fields["network_evidence"] = evidence
+        if profile.git_write != "none":
+            fields["git_write"] = profile.git_write
+            fields["git_evidence"] = evidence
+            if profile.repo_scoped:
+                fields["repo_scope"] = extract_repo_scope(args, payload_index)
+    else:
+        # Only the server name and what actually executes (command basename +
+        # the launched package) seed keyword detection. Path/option-value args
+        # are data — a "/home/git/cache" arg must not imply git_write.
+        tokens = _tokenize(name, *identity_tokens(command, args))
+        if shell_hits := _SHELL_TOKENS & tokens:
+            fields["shell_exec"] = "suspected"
+            fields["shell_evidence"] = f"keyword:{sorted(shell_hits)[0]}"
+        if file_hits := _FILE_TOKENS & tokens:
+            fields["file_access"] = "suspected"
+            fields["file_evidence"] = f"keyword:{sorted(file_hits)[0]}"
+            name_tokens = [t for t in _TOKEN_SPLIT.split(name.lower()) if t]
+            fields["file_readonly"] = bool(
+                name_tokens and name_tokens[0] in _READONLY_LEAD_TOKENS
+            )
+        if network_hits := _NETWORK_TOKENS & tokens:
+            fields["network_send"] = "suspected"
+            fields["network_evidence"] = f"keyword:{sorted(network_hits)[0]}"
+        if git_hits := _GIT_TOKENS & tokens:
+            fields["git_write"] = "suspected"
+            fields["git_evidence"] = f"keyword:{sorted(git_hits)[0]}"
+
+    # A shell binary as the command usually just launches the MCP server (e.g.
+    # `bash start-server.sh`); it does not prove the agent gets an arbitrary
+    # shell tool, so it stays "suspected" rather than escalating to confirmed.
+    # Normalize case and both path separator styles: a Windows-authored config
+    # (C:\...\PowerShell.EXE) may be scanned from a POSIX host.
+    binary = os.path.basename(command.replace("\\", "/")).lower() if command else ""
+    if binary in _SHELL_BINARIES and fields.get("shell_exec", "none") != "confirmed":
+        fields["shell_exec"] = "suspected"
+        fields["shell_evidence"] = f"shell-binary-launcher:{binary}"
+
+    return Capability(
+        name=name,
+        cap_kind="MCPServer",
+        command=cmd_str,
+        transport=transport,
+        agent_scope=agent_scope,
+        **fields,
+    )
 
 
-def _parse_mcp_servers(servers_dict: dict[str, Any]) -> list[Capability]:
-    caps: list[Capability] = []
-    for name, config in servers_dict.items():
-        url = config.get("url")
-        command = config.get("command")
-        args = config.get("args", [])
-        transport = "sse" if url else "stdio"
-        cmd_str: str | None = None
-        if command:
-            cmd_str = command + (" " + " ".join(args) if args else "")
-        caps.append(Capability(
-            name=name,
-            cap_kind="MCPServer",
-            command=cmd_str,
-            transport=transport,
-            has_shell=_is_shell_server(name, command, args),
-        ))
-    return caps
+def _parse_mcp_servers(servers_dict: dict[str, Any], agent_scope: str) -> list[Capability]:
+    return [
+        _build_mcp_capability(name, config, agent_scope)
+        for name, config in servers_dict.items()
+    ]
 
 
-def _parse_hooks(hooks_dict: dict[str, Any]) -> list[Capability]:
+def _parse_hooks(hooks_dict: dict[str, Any], agent_scope: str) -> list[Capability]:
     caps: list[Capability] = []
     for event, hook_groups in hooks_dict.items():
         if not isinstance(hook_groups, list):
@@ -116,6 +215,8 @@ def _parse_hooks(hooks_dict: dict[str, Any]) -> list[Capability]:
                         cap_kind="ShellHook",
                         command=hook.get("command"),
                         has_shell=True,
+                        agent_scope=agent_scope,
+                        shell_evidence=f"hook:{event}",
                     ))
     return caps
 
@@ -130,6 +231,9 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
 
     agent_name, platform_name = _detect_agent(config_path)
     agent = Agent(name=agent_name, platform=platform_name, config_path=str(config_path))
+    # Scope capabilities to their owning agent so identically-named servers in
+    # different agents stay distinct nodes.
+    agent_scope = agent.objectid
 
     caps: list[Capability] = []
 
@@ -139,10 +243,10 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
         servers = raw.get("servers", {})
     if not servers and "mcp" in raw:
         servers = raw["mcp"].get("servers", {})
-    caps.extend(_parse_mcp_servers(servers))
+    caps.extend(_parse_mcp_servers(servers, agent_scope))
 
     # Claude Code hooks
     if "hooks" in raw:
-        caps.extend(_parse_hooks(raw["hooks"]))
+        caps.extend(_parse_hooks(raw["hooks"], agent_scope))
 
     return agent, caps

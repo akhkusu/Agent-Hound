@@ -56,10 +56,12 @@ def test_scan_output_contains_agent_node(tmp_path):
     assert "Agent" in kinds_in_graph
 
 
-def test_discover_subcommand_runs(tmp_path):
+def test_discover_subcommand_runs(tmp_path, monkeypatch):
+    # Keep the test independent of real user configuration files. Parsing
+    # malformed discovered configs is covered separately from CLI dispatch.
+    monkeypatch.setattr("agenthound.cli.discover_config_files", lambda: [])
     runner = CliRunner()
     out = tmp_path / "out.json"
     result = runner.invoke(cli, ["discover", "--output", str(out), "--scope", "workspace",
                                   "--workspace", str(tmp_path)])
-    # May find 0 configs on test runner — just confirm it doesn't crash
     assert result.exit_code == 0

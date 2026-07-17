@@ -11,10 +11,11 @@ from rich.table import Table
 from agenthound import __version__
 from agenthound.collectors.assets import collect_assets
 from agenthound.collectors.base import CollectionResult
-from agenthound.collectors.capabilities import collect_from_config, collect_from_configs
+from agenthound.collectors.capabilities import collect_from_configs
 from agenthound.collectors.impact import check_internet, collect_impact
 from agenthound.collectors.sources import collect_sources
 from agenthound.discovery.config_parser import discover_config_files
+from agenthound.models.edges import Edge
 from agenthound.output.opengraph import build_opengraph, write_opengraph
 from agenthound.platforms import CUSTOM_TYPES
 
@@ -81,9 +82,14 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
     combined.capabilities = cap_result.capabilities
     combined.edges.extend(cap_result.edges)
 
+    seen_source_ids: set[str] = set()
     for agent in cap_result.agents:
         src = collect_sources(agent=agent, workspace=workspace, scope=scope)
-        combined.sources.extend(src.sources)
+        # A source file is one node; only the Influences edge is per-agent.
+        for source in src.sources:
+            if source.objectid not in seen_source_ids:
+                combined.sources.append(source)
+                seen_source_ids.add(source.objectid)
         combined.edges.extend(src.edges)
 
     asset_result = collect_assets(capabilities=cap_result.capabilities, workspace=workspace, scope=scope)
@@ -104,7 +110,7 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
 
     console.print(f"[green]Output written to {output}[/green]")
     console.print(f"  Nodes: {combined.total_nodes} | Edges: {combined.total_edges}")
-    _print_findings(combined, internet)
+    _print_findings(combined)
 
 
 def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, internet: bool) -> None:
@@ -119,22 +125,61 @@ def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, 
     console.print()
 
 
-def _print_findings(result: CollectionResult, internet: bool) -> None:
+def _edge_confidence_note(edges: list[Edge]) -> str:
+    confirmed = sum(1 for e in edges if e.properties.get("confidence") == "confirmed")
+    return f"{confirmed} confirmed, {len(edges) - confirmed} suspected"
+
+
+def _asset_confidence_note(edges: list[Edge]) -> tuple[int, str]:
+    """Aggregate CanAccess edges per target asset, taking each asset's highest
+    confidence, so the count reflects assets rather than edges."""
+    best: dict[str, str] = {}
+    for e in edges:
+        conf = e.properties.get("confidence", "suspected")
+        if best.get(e.end) != "confirmed":
+            best[e.end] = conf
+    confirmed = sum(1 for c in best.values() if c == "confirmed")
+    return len(best), f"{confirmed} confirmed, {len(best) - confirmed} suspected"
+
+
+def _print_findings(result: CollectionResult) -> None:
+    """Summarize findings from the actual generated edges, showing how much of
+    each is a verified fact versus a name-based guess (confidence)."""
     findings: list[str] = []
-    ipi_sources = result.sources
+    # Only sources that actually influence an agent count as IPI entry points.
+    influenced = {e.start for e in result.edges if e.kind == "Influences"}
+    ipi_sources = [s for s in result.sources if s.objectid in influenced]
     if ipi_sources:
         findings.append(
             f"[yellow]{len(ipi_sources)} IPI source(s): "
             f"{', '.join(s.name for s in ipi_sources[:3])}"
             f"{'...' if len(ipi_sources) > 3 else ''}[/yellow]"
         )
-    privileged_caps = [c for c in result.capabilities if c.has_shell]
-    if privileged_caps and result.assets:
+
+    can_access = [e for e in result.edges if e.kind == "CanAccess"]
+    if can_access:
+        reachable_assets, note = _asset_confidence_note(can_access)
         findings.append(
-            f"[red]{len(result.assets)} asset(s) reachable via shell capability[/red]"
+            f"[red]{reachable_assets} sensitive asset(s) reachable via "
+            f"capabilities ({note})[/red]"
         )
-    if internet and any(i.impact_kind == "Exfiltration" for i in result.impacts):
-        findings.append("[red]Exfiltration path detected: internet is reachable[/red]")
+
+    impact_labels = [
+        ("SystemTakeover", "System-takeover"),
+        ("Exfiltration", "Internet-exfiltration"),
+        ("SupplyChainContamination", "Supply-chain-contamination"),
+    ]
+    for kind, label in impact_labels:
+        impact_ids = {i.objectid for i in result.impacts if i.impact_kind == kind}
+        if not impact_ids:
+            continue
+        triggers = [
+            e for e in result.edges if e.kind == "Triggers" and e.end in impact_ids
+        ]
+        findings.append(
+            f"[red]{label} path detected ({_edge_confidence_note(triggers)})[/red]"
+        )
+
     if findings:
         console.print()
         console.print("[bold]Security Findings:[/bold]")

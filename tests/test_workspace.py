@@ -1,6 +1,4 @@
-import os
 from pathlib import Path
-import pytest
 from agenthound.discovery.workspace import find_asset_files, find_source_files
 
 
@@ -42,7 +40,7 @@ def test_source_kind_doc_file(tmp_path):
 def test_find_ssh_keys(tmp_path):
     ssh_dir = tmp_path / ".ssh"
     ssh_dir.mkdir()
-    (ssh_dir / "id_rsa").write_text("key")
+    (ssh_dir / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n")
     (ssh_dir / "known_hosts").write_text("hosts")
     results = find_asset_files(scope="workspace", workspace=tmp_path)
     paths = {Path(p).name for p, _ in results}
@@ -64,9 +62,36 @@ def test_find_env_files(tmp_path):
 def test_asset_kind_ssh_key(tmp_path):
     ssh_dir = tmp_path / ".ssh"
     ssh_dir.mkdir()
-    (ssh_dir / "id_ed25519").write_text("key")
+    (ssh_dir / "id_ed25519").write_text(
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----\n"
+    )
     results = find_asset_files(scope="workspace", workspace=tmp_path)
     assert any(kind == "SSHKey" for _, kind in results)
+
+
+def test_ssh_pubkey_and_config_not_flagged(tmp_path):
+    ssh_dir = tmp_path / ".ssh"
+    ssh_dir.mkdir()
+    (ssh_dir / "id_rsa.pub").write_text("ssh-rsa AAAA...")
+    (ssh_dir / "id_notakey").write_text("just some notes, no header")
+    results = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert not any(kind == "SSHKey" for _, kind in results)
+
+
+def test_env_template_not_flagged(tmp_path):
+    (tmp_path / ".env.example").write_text("SECRET=changeme")
+    (tmp_path / ".env.sample").write_text("SECRET=changeme")
+    results = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert not any(kind == "EnvFile" for _, kind in results)
+
+
+def test_vendored_dirs_excluded(tmp_path):
+    nm = tmp_path / "node_modules" / "pkg"
+    nm.mkdir(parents=True)
+    (nm / ".env").write_text("SECRET=x")
+    (nm / "README.md").write_text("# vendored")
+    assets = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert not any("node_modules" in p for p, _ in assets)
 
 
 def test_asset_kind_env_file(tmp_path):
@@ -109,3 +134,41 @@ def test_deep_source_dir_file(tmp_path):
     results = find_source_files(tmp_path)
     paths = {Path(p).name for p, _ in results}
     assert "overview.md" in paths
+
+
+def test_vscode_copilot_instruction_in_hidden_github_dir(tmp_path):
+    github = tmp_path / ".github"
+    github.mkdir()
+    instruction = github / "copilot-instructions.md"
+    instruction.write_text("rules")
+    results = find_source_files(tmp_path)
+    assert (str(instruction), "AgentInstruction") in results
+
+
+def test_gcloud_adc_requires_gcloud_dir(tmp_path):
+    # A stray ADC-named file outside a gcloud dir is not a credential.
+    (tmp_path / "application_default_credentials.json").write_text("{}")
+    stray = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert not any(k == "GCloudCredentials" for _, k in stray)
+    gdir = tmp_path / "gcloud"
+    gdir.mkdir()
+    (gdir / "application_default_credentials.json").write_text("{}")
+    real = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert any(k == "GCloudCredentials" for _, k in real)
+
+
+def test_worktree_git_file_detected_as_source_code(tmp_path):
+    wt = tmp_path / "worktree"
+    wt.mkdir()
+    (wt / ".git").write_text("gitdir: /somewhere/.git/worktrees/x")
+    results = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert any(k == "SourceCode" and "worktree" in p for p, k in results)
+
+
+def test_bogus_git_file_not_source_code(tmp_path):
+    # A .git file that is not a gitdir pointer must not count as a repo.
+    d = tmp_path / "notarepo"
+    d.mkdir()
+    (d / ".git").write_text("just some text")
+    results = find_asset_files(scope="workspace", workspace=tmp_path)
+    assert not any(k == "SourceCode" and "notarepo" in p for p, k in results)
