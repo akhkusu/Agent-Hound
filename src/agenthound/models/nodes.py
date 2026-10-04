@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 SourceKind = Literal["WebPage", "GitHubIssue", "DocFile", "SlackThread", "Skill", "AgentInstruction"]
-CapabilityKind = Literal["MCPServer", "MCPTool", "ShellHook", "Permission"]
+CapabilityKind = Literal["MCPServer", "MCPTool", "ShellHook", "Permission", "BuiltInTool"]
 AssetKind = Literal["SSHKey", "EnvFile", "AwsCredentials", "GCloudCredentials", "KubeConfig", "SourceCode"]
 ImpactKind = Literal["Exfiltration", "SupplyChainContamination", "SystemTakeover"]
 
@@ -107,6 +107,8 @@ class Capability(BaseModel):
     file_evidence: str = ""
     network_evidence: str = ""
     git_evidence: str = ""
+    read_config_path: str = ""
+    read_permissions: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
     @classmethod

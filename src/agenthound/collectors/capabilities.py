@@ -76,6 +76,8 @@ def _merge_capabilities(a: Capability, b: Capability) -> Capability:
     Access range merges wide (union / unknown wins), confidence merges
     conservatively so the graph never overstates certainty.
     """
+    if a.cap_kind == "BuiltInTool":
+        return a
     file_access, allowed_paths, file_readonly = _merge_file_dimension(a, b)
     return Capability(
         name=a.name,
@@ -104,7 +106,8 @@ def collect_from_config(config_path: Path) -> CollectionResult:
     result.agents.append(agent)
     result.capabilities.extend(caps)
     for cap in caps:
-        result.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability"))
+        properties = {"confidence": "suspected", "evidence": cap.file_evidence + "; runtime tool restrictions and other settings unverified"} if cap.cap_kind == "BuiltInTool" else {}
+        result.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=properties))
     return result
 
 

@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from agenthound.discovery.builtin_read import read_capability
+
 from agenthound.discovery.profiles import (
     extract_allowed_paths,
     extract_repo_scope,
@@ -98,7 +100,7 @@ def _detect_agent(config_path: Path) -> tuple[str, str]:
     if "windsurf_mcp" in name:
         return "windsurf", "Windsurf"
     # Fall back to path heuristics for standard install locations
-    if ".claude" in path_str and name == "settings.json":
+    if config_path.parent.name == ".claude" and name in {"settings.json", "settings.local.json"}:
         return "claude-code", "Claude Code"
     if ".vscode" in path_str:
         return "vscode-copilot", "VS Code Copilot"
@@ -248,5 +250,10 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
     # Claude Code hooks
     if "hooks" in raw:
         caps.extend(_parse_hooks(raw["hooks"], agent_scope))
+
+    if agent_name == "claude-code":
+        builtin = read_capability(agent, raw)
+        if builtin is not None:
+            caps.append(builtin)
 
     return agent, caps
