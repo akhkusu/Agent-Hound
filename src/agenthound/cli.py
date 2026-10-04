@@ -23,7 +23,7 @@ console = Console()
 
 
 @click.group(invoke_without_command=True)
-@click.option("--config", "-c", type=click.Path(exists=True, path_type=Path), help="Agent config file.")
+@click.option("--config", "-c", type=click.Path(exists=True, path_type=Path), help="Scan only this config file; do not merge user/project/local settings.")
 @click.option("--workspace", "-w", type=click.Path(exists=True, path_type=Path),
               default=".", show_default=True, help="Workspace directory to scan for sources.")
 @click.option("--scope", type=click.Choice(["workspace", "global", "all"]), default="all",
@@ -54,8 +54,8 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
               show_default=True)
 @click.option("--verbose", "-v", is_flag=True)
 def discover(workspace: Path, scope: str, output: Path, verbose: bool) -> None:
-    """Auto-discover agent configs and scan for attack paths."""
-    config_paths = discover_config_files()
+    """Discover configs; merge Claude user/shared/local settings for this workspace."""
+    config_paths = discover_config_files(workspace)
     if not config_paths:
         console.print("[yellow]No agent config files found.[/yellow]")
         return
@@ -63,14 +63,15 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool) -> None:
         console.print(f"[blue]Found {len(config_paths)} config file(s)[/blue]")
         for p in config_paths:
             console.print(f"  {p}")
-    _run_scan(config_paths, workspace, scope, output, verbose)
+    _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=True)
 
 
-def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool) -> None:
+def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,
+              merge_claude: bool = False) -> None:
     console.print(f"[bold blue]Agent-Hound v{__version__}[/bold blue]")
     console.print()
 
-    cap_result = collect_from_configs(config_paths)
+    cap_result = collect_from_configs(config_paths, workspace=workspace if merge_claude else None)
     internet = check_internet()
 
     if verbose:

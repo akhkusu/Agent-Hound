@@ -107,7 +107,7 @@ agenthound --config ~/.claude/settings.json \
   --workspace /srv/myproject --scope all -o output.json -v
 ```
 
-Each command reads the specified file; it does not merge other agent configuration files. To scan configurations found at the collector's predefined discovery locations:
+Each `-c`/`--config` command reads only the specified file; it never implicitly reads user, shared, or local settings. To discover other agent configurations and merge Claude Code settings for the selected project:
 
 ```bash
 agenthound discover --workspace /srv/myproject --scope all -o output.json -v

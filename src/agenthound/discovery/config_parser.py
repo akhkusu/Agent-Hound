@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from agenthound.discovery.builtin_read import read_capability
+from agenthound.discovery.claude_mcp import claude_mcp_paths, mcp_capabilities
 
 from agenthound.discovery.profiles import (
     extract_allowed_paths,
@@ -69,16 +70,26 @@ _DISCOVERY_CANDIDATES = [
 ]
 
 
-def discover_config_files() -> list[Path]:
+def claude_settings_paths(workspace: Path) -> list[Path]:
+    """Return ordered user/shared/local candidates; never create settings."""
+    user_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))).expanduser()
+    return [user_dir / "settings.json", workspace / ".claude" / "settings.json",
+            workspace / ".claude" / "settings.local.json"]
+
+
+def discover_config_files(workspace: Path | None = None) -> list[Path]:
     """Return paths of all agent config files found on this system."""
     found: list[Path] = []
     seen: set[Path] = set()
-    for path, _ in _DISCOVERY_CANDIDATES:
+    candidates = [path for path, hint in _DISCOVERY_CANDIDATES if hint != "claude-code"]
+    candidates.extend(claude_settings_paths(workspace or Path.cwd()))
+    candidates.extend(claude_mcp_paths(workspace or Path.cwd()))
+    for path in candidates:
         try:
             resolved = path.resolve()
         except OSError:
             continue
-        if resolved not in seen and path.exists():
+        if resolved not in seen and path.is_file():
             found.append(path)
             seen.add(resolved)
     return found
@@ -88,6 +99,8 @@ def _detect_agent(config_path: Path) -> tuple[str, str]:
     """Return (name, platform) for a config file path."""
     path_str = str(config_path)
     name = config_path.name
+    if name in {".claude.json", ".mcp.json"}:
+        return "claude-code", "Claude Code"
     # Match by filename first (covers fixtures and non-standard locations)
     if "claude_desktop_config" in name:
         return "claude-desktop", "Claude Desktop"
@@ -231,8 +244,24 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Cannot parse config {config_path}: {exc}") from exc
 
+    if config_path.name in {".claude.json", ".mcp.json"}:
+        agent = Agent(name="claude-code", platform="Claude Code", config_path=str(config_path))
+        # Explicit -c is single-file: nested project state is not guessed.
+        servers = raw.get("mcpServers", {})
+        scope = "user" if config_path.name == ".claude.json" else "project"
+        caps = mcp_capabilities(agent, {name: (server, config_path, scope) for name, server in servers.items()})
+        builtin = read_capability(agent, {})
+        if builtin is not None:
+            caps.append(builtin)
+        return agent, caps
+    return parse_config_data(config_path, raw)
+
+
+def parse_config_data(config_path: Path, raw: dict[str, Any], agent: Agent | None = None) -> tuple[Agent, list[Capability]]:
+    """Parse loaded settings, optionally for an already identified session."""
+
     agent_name, platform_name = _detect_agent(config_path)
-    agent = Agent(name=agent_name, platform=platform_name, config_path=str(config_path))
+    agent = agent or Agent(name=agent_name, platform=platform_name, config_path=str(config_path))
     # Scope capabilities to their owning agent so identically-named servers in
     # different agents stay distinct nodes.
     agent_scope = agent.objectid
@@ -251,7 +280,7 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
     if "hooks" in raw:
         caps.extend(_parse_hooks(raw["hooks"], agent_scope))
 
-    if agent_name == "claude-code":
+    if agent.name == "claude-code":
         builtin = read_capability(agent, raw)
         if builtin is not None:
             caps.append(builtin)

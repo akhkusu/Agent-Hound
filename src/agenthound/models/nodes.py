@@ -109,6 +109,11 @@ class Capability(BaseModel):
     git_evidence: str = ""
     read_config_path: str = ""
     read_permissions: dict[str, Any] = Field(default_factory=dict)
+    read_policy_sources: list[dict[str, Any]] = Field(default_factory=list)
+    read_workspace: str = ""
+    mcp_config_path: str = ""
+    mcp_scope: str = ""
+    mcp_evidence: str = ""
 
     @model_validator(mode="before")
     @classmethod
@@ -141,6 +146,9 @@ class Capability(BaseModel):
         }
         if self.command is not None:
             props["command"] = self.command
+        if self.mcp_config_path:
+            props.update(config_path=self.mcp_config_path, mcp_scope=self.mcp_scope,
+                         evidence=self.mcp_evidence)
         if self.transport is not None:
             props["transport"] = self.transport
         if self.allowed_paths is not None:

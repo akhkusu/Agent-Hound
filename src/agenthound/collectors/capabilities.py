@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
-from agenthound.discovery.config_parser import parse_config
+from agenthound.discovery.config_parser import claude_settings_paths, parse_config
+from agenthound.discovery.claude_settings import collect_claude_settings
+from agenthound.discovery.claude_mcp import claude_mcp_paths
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Capability, Confidence
 
@@ -85,6 +87,7 @@ def _merge_capabilities(a: Capability, b: Capability) -> Capability:
         command=a.command if a.command is not None else b.command,
         transport=a.transport if a.transport is not None else b.transport,
         agent_scope=a.agent_scope,
+        mcp_config_path=a.mcp_config_path, mcp_scope=a.mcp_scope, mcp_evidence=a.mcp_evidence,
         shell_exec=_max_conf(a.shell_exec, b.shell_exec),
         file_access=file_access,
         network_send=_max_conf(a.network_send, b.network_send),
@@ -106,12 +109,12 @@ def collect_from_config(config_path: Path) -> CollectionResult:
     result.agents.append(agent)
     result.capabilities.extend(caps)
     for cap in caps:
-        properties = {"confidence": "suspected", "evidence": cap.file_evidence + "; runtime tool restrictions and other settings unverified"} if cap.cap_kind == "BuiltInTool" else {}
+        properties = {"confidence": "suspected", "evidence": cap.file_evidence + "; runtime tool restrictions and other settings unverified"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
         result.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=properties))
     return result
 
 
-def collect_from_configs(config_paths: list[Path]) -> CollectionResult:
+def collect_from_configs(config_paths: list[Path], workspace: Path | None = None) -> CollectionResult:
     """Parse multiple config files, deduplicating agents and capabilities by objectid.
 
     Same-id capabilities from different configs are merged instead of dropped,
@@ -123,8 +126,25 @@ def collect_from_configs(config_paths: list[Path]) -> CollectionResult:
     caps_by_id: dict[str, Capability] = {}
     seen_edge_keys: set[tuple[str, str, str]] = set()
 
-    for path in config_paths:
-        partial = collect_from_config(path)
+    partials = []
+    grouped_paths: set[Path] = set()
+    if workspace is not None:
+        candidates = {p.resolve() for p in [*claude_settings_paths(workspace), *claude_mcp_paths(workspace)]}
+        grouped_paths = {p.resolve() for p in config_paths if p.resolve() in candidates}
+        if grouped_paths:
+            agent, caps = collect_claude_settings(config_paths, workspace)
+            partial = CollectionResult()
+            partial.agents.append(agent)
+            # Reuse established edge creation, preserving one owner per cap.
+            by_id = {cap.objectid: cap for cap in caps}
+            partial.capabilities.extend(by_id.values())
+            for cap in by_id.values():
+                props = {"confidence": "suspected", "evidence": cap.file_evidence + "; managed policy, runtime restrictions and trust unobserved"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
+                partial.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=props))
+            partials.append(partial)
+    partials.extend(collect_from_config(path) for path in config_paths if path.resolve() not in grouped_paths)
+
+    for partial in partials:
 
         for agent in partial.agents:
             if agent.objectid not in seen_agent_ids:

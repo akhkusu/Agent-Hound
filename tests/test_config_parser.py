@@ -97,10 +97,13 @@ def test_objectid_deterministic_across_parses():
     assert caps1[0].objectid == caps2[0].objectid
 
 
-def test_discover_config_files_returns_list():
+def test_discover_config_files_returns_list(tmp_path, monkeypatch):
     # discover_config_files scans known system paths — on the test runner
     # those paths may not exist, so we just verify it returns a list of Paths.
-    paths = discover_config_files()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    monkeypatch.setattr("agenthound.discovery.config_parser._DISCOVERY_CANDIDATES", [])
+    paths = discover_config_files(tmp_path)
     assert isinstance(paths, list)
     for p in paths:
         assert isinstance(p, Path)

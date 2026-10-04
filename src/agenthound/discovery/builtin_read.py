@@ -82,7 +82,9 @@ def read_access(cap: Capability, asset: Asset, workspace: Path) -> dict[str, str
     config = Path(cap.read_config_path).absolute()
     user_config = config == Path.home() / ".claude" / "settings.json"
     project_config = config.parent.name == ".claude" and not user_config
-    if project_config and config.parent.parent.resolve() != workspace:
+    if cap.read_workspace and Path(cap.read_workspace) != workspace:
+        return None
+    if not cap.read_policy_sources and project_config and config.parent.parent.resolve() != workspace:
         return None
     anchor = config.parent if user_config or not project_config else workspace
     policy = cap.read_permissions
@@ -94,26 +96,30 @@ def read_access(cap: Capability, asset: Asset, workspace: Path) -> dict[str, str
     paths = (requested, resolved)
     matches: dict[str, list[str]] = {"deny": [], "ask": [], "allow": []}
     uncertain = []
-    for kind in matches:
-        rules = policy.get(kind, [])
-        if not isinstance(rules, list):
-            if kind == "deny":
-                return None
-            uncertain.append(f"invalid-{kind}-rules")
-            continue
-        for rule in rules:
-            if not isinstance(rule, str):
+    sources = cap.read_policy_sources or [{"path": str(config), "anchor": str(anchor), "permissions": policy}]
+    for source in sources:
+        source_policy = source["permissions"]
+        anchor = Path(source["anchor"])
+        for kind in matches:
+            rules = source_policy.get(kind, [])
+            if not isinstance(rules, list):
                 if kind == "deny":
                     return None
-                uncertain.append(f"invalid-{kind}-rule")
+                uncertain.append(f"invalid-{kind}-rules")
                 continue
-            outcomes = [_match(rule, kind, p, workspace, anchor) for p in paths]
-            if None in outcomes:
-                if kind == "deny":
-                    return None
-                uncertain.append(f"unsupported-{kind}:{rule}")
-            elif (all(outcomes) if kind == "allow" else any(outcomes)):
-                matches[kind].append(rule)
+            for rule in rules:
+                if not isinstance(rule, str):
+                    if kind == "deny":
+                        return None
+                    uncertain.append(f"invalid-{kind}-rule")
+                    continue
+                outcomes = [_match(rule, kind, p, workspace, anchor) for p in paths]
+                if None in outcomes:
+                    if kind == "deny":
+                        return None
+                    uncertain.append(f"unsupported-{kind}:{rule}")
+                elif (all(outcomes) if kind == "allow" else any(outcomes)):
+                    matches[kind].append(rule + (f" @ {source['path']}" if cap.read_policy_sources else ""))
     if matches["deny"]:
         return None
     if matches["ask"] and policy.get("defaultMode") == "dontAsk":
@@ -129,9 +135,9 @@ def read_access(cap: Capability, asset: Asset, workspace: Path) -> dict[str, str
     return {
         "confidence": "suspected",
         "evidence": "; ".join([
-            "builtin:claude-code:Read", f"config:{config}", decision,
-            "workspace assumed to be session cwd", "single-settings-file; effective policy not merged",
-            "runtime approval, trust, hooks, tool restrictions and OS permissions unverified",
+            "builtin:claude-code:Read", "configs:" + ",".join(source["path"] for source in sources), decision,
+            "workspace assumed to be session cwd", "observed user/shared/local settings merged; managed policy and CLI overrides unobserved" if cap.read_policy_sources else "single-settings-file; effective policy not merged",
+            "runtime approval, shared/local trust and tracking, hooks, setting-source selection, tool restrictions and OS permissions unverified",
             *uncertain,
         ]),
     }
