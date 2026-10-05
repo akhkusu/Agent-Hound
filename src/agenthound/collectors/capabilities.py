@@ -8,6 +8,7 @@ from agenthound.collectors.base import CollectionResult
 from agenthound.discovery.config_parser import claude_settings_paths, parse_config
 from agenthound.discovery.claude_settings import collect_claude_settings
 from agenthound.discovery.claude_mcp import claude_mcp_paths
+from agenthound.discovery.codex_settings import codex_config_paths, collect_codex_settings
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Capability, Confidence
 
@@ -141,6 +142,20 @@ def collect_from_configs(config_paths: list[Path], workspace: Path | None = None
             for cap in by_id.values():
                 props = {"confidence": "suspected", "evidence": (cap.shell_evidence or cap.file_evidence) + "; managed policy, runtime restrictions and trust unobserved"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
                 partial.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=props))
+            partials.append(partial)
+        codex_candidates = {path.resolve() for path in codex_config_paths(workspace)}
+        codex_paths = [path for path in config_paths if path.resolve() in codex_candidates]
+        grouped_paths.update(path.resolve() for path in codex_paths)
+        if codex_paths:
+            agent, caps = collect_codex_settings(codex_paths, workspace)
+            partial = CollectionResult()
+            partial.agents.append(agent)
+            partial.capabilities.extend(caps)
+            partial.edges.extend(
+                Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability",
+                     properties={"confidence": "suspected", "evidence": cap.mcp_evidence})
+                for cap in caps
+            )
             partials.append(partial)
     partials.extend(collect_from_config(path) for path in config_paths if path.resolve() not in grouped_paths)
 

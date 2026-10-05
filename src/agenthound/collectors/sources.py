@@ -16,6 +16,7 @@ from agenthound.models.nodes import Agent, Source
 _INSTRUCTION_TARGETS: dict[str, set[str]] = {
     ".cursorrules": {"cursor"},
     "GEMINI.md": {"gemini"},
+    "AGENTS.override.md": {"codex"},
 }
 
 
@@ -55,6 +56,11 @@ def _influence(
             # optional/experimental and therefore remains suspected.
             confidence = "confirmed" if rel == ("AGENTS.md",) else "suspected"
             return True, confidence, f"instruction:{source.name}"
+        if source.name in {"AGENTS.md", "AGENTS.override.md"} and agent.name == "codex":
+            if source.name == "AGENTS.md" and (Path(source.path).parent / "AGENTS.override.md").is_file():
+                return None
+            confidence = "confirmed" if rel in {("AGENTS.md",), ("AGENTS.override.md",)} else "suspected"
+            return True, confidence, f"instruction:{source.name}; presence only, actual loading unverified"
         targets = _INSTRUCTION_TARGETS.get(source.name)
         if targets is None:
             # Unmapped instruction file (AGENTS.md, SYSTEM_PROMPT.md): commonly

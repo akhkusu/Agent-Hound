@@ -16,6 +16,7 @@ def layout(tmp_path, monkeypatch):
     project.mkdir()
     monkeypatch.setattr(Path, 'home', classmethod(lambda cls: home))
     monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
+    monkeypatch.delenv('CODEX_HOME', raising=False)
     monkeypatch.setattr('agenthound.discovery.config_parser._DISCOVERY_CANDIDATES', [])
     return home, project
 

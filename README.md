@@ -6,7 +6,7 @@
 
 **Discover the Attack Paths Created by AI Agents.**
 
-**Agent-Hound** maps potential **Indirect Prompt Injection (IPI)** attack paths in AI agent environments such as Claude Code and Claude Desktop. It builds a graph from agent configuration, local source files, sensitive file locations, and connectivity checks so you can inspect where untrusted inputs meet privileged capabilities.
+**Agent-Hound** maps potential **Indirect Prompt Injection (IPI)** attack paths in AI agent environments such as Claude Code and Codex. It builds a graph from agent configuration, local source files, sensitive file locations, and connectivity checks so you can inspect where untrusted inputs meet privileged capabilities.
 
 Built on the [SpecterOps OpenGraph](https://specterops.io/opengraph/) specification, Agent-Hound produces JSON for [BloodHound CE](https://bloodhound.specterops.io/) File Ingest, letting you visualize potential attack paths and query them with Cypher.
 
@@ -27,7 +27,7 @@ Agent-Hound models this chain as five interconnected node types, producing a gra
 | Node | Role | Examples |
 | :--- | :--- | :--- |
 | **Source** | Local files that could influence an agent | `README.md`, `CLAUDE.md`, `AGENTS.md` |
-| **Agent** | Agent environment identified from its configuration | Claude Code, Codex|
+| **Agent** | Agent environment identified from its configuration | Claude Code, Codex |
 | **Capability** | Configured MCP servers, command hooks, and supported built-in tools | `filesystem`, `github`, `Read`, `Bash` |
 | **Asset** | Discovered sensitive files and source repositories | `~/.ssh/id_rsa`, `.env`, a local Git repository |
 | **Impact** | Potential consequences inferred from capabilities and environment checks | `System-Takeover`, `Internet-Exfiltration`, `Supply-Chain-Contamination` |
@@ -106,6 +106,13 @@ Each `-c`/`--config` command reads only the specified file; it never implicitly 
 
 ```bash
 agenthound discover --workspace /srv/myproject --scope all -o output.json -v
+```
+
+For a project-local Codex config:
+
+```bash
+cd /path/to/project
+agenthound -c .codex/config.toml -w . --scope workspace -o codex-graph.json -v
 ```
 
 | Scope | Source collection | Asset collection |

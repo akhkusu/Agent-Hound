@@ -9,7 +9,7 @@ from pathlib import Path
 from agenthound.models.nodes import AssetKind, SourceKind
 
 _AGENT_INSTRUCTION_NAMES = {
-    "CLAUDE.md", "AGENTS.md", "GEMINI.md", ".cursorrules",
+    "CLAUDE.md", "AGENTS.md", "AGENTS.override.md", "GEMINI.md", ".cursorrules",
     "SYSTEM_PROMPT.md",
 }
 

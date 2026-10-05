@@ -85,6 +85,8 @@ def discover_config_files(workspace: Path | None = None) -> list[Path]:
     candidates = [path for path, hint in _DISCOVERY_CANDIDATES if hint != "claude-code"]
     candidates.extend(claude_settings_paths(workspace or Path.cwd()))
     candidates.extend(claude_mcp_paths(workspace or Path.cwd()))
+    from agenthound.discovery.codex_settings import codex_config_paths
+    candidates.extend(codex_config_paths(workspace or Path.cwd()))
     for path in candidates:
         try:
             resolved = path.resolve()
@@ -100,6 +102,8 @@ def _detect_agent(config_path: Path) -> tuple[str, str]:
     """Return (name, platform) for a config file path."""
     path_str = str(config_path)
     name = config_path.name
+    if (config_path.parent.name == ".codex" and name == "config.toml") or name == "codex_config.toml":
+        return "codex", "Codex"
     if name in {".claude.json", ".mcp.json"}:
         return "claude-code", "Claude Code"
     # Match by filename first (covers fixtures and non-standard locations)
@@ -238,6 +242,9 @@ def _parse_hooks(hooks_dict: dict[str, Any], agent_scope: str) -> list[Capabilit
 
 def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
     """Parse an agent config file. Returns (Agent, list[Capability])."""
+    if config_path.suffix == ".toml" and _detect_agent(config_path)[0] == "codex":
+        from agenthound.discovery.codex_settings import collect_codex_settings
+        return collect_codex_settings([config_path], config_path.parent.parent)
     try:
         with open(config_path) as f:
             raw: dict[str, Any] = json.load(f)
