@@ -109,7 +109,7 @@ def collect_from_config(config_path: Path) -> CollectionResult:
     result.agents.append(agent)
     result.capabilities.extend(caps)
     for cap in caps:
-        properties = {"confidence": "suspected", "evidence": cap.file_evidence + "; runtime tool restrictions and other settings unverified"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
+        properties = {"confidence": "suspected", "evidence": (cap.shell_evidence or cap.file_evidence) + "; runtime tool restrictions and other settings unverified"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
         result.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=properties))
     return result
 
@@ -139,7 +139,7 @@ def collect_from_configs(config_paths: list[Path], workspace: Path | None = None
             by_id = {cap.objectid: cap for cap in caps}
             partial.capabilities.extend(by_id.values())
             for cap in by_id.values():
-                props = {"confidence": "suspected", "evidence": cap.file_evidence + "; managed policy, runtime restrictions and trust unobserved"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
+                props = {"confidence": "suspected", "evidence": (cap.shell_evidence or cap.file_evidence) + "; managed policy, runtime restrictions and trust unobserved"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
                 partial.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=props))
             partials.append(partial)
     partials.extend(collect_from_config(path) for path in config_paths if path.resolve() not in grouped_paths)

@@ -28,24 +28,23 @@ Agent-Hound models this chain as five interconnected node types, producing a gra
 | :--- | :--- | :--- |
 | **Source** | Local files that could influence an agent | `README.md`, `CLAUDE.md`, `AGENTS.md` |
 | **Agent** | Agent environment identified from its configuration | Claude Code, Codex|
-| **Capability** | Configured MCP servers and command hooks | `filesystem`, `github`, `hook:PreToolUse:Bash` |
+| **Capability** | Configured MCP servers, command hooks, and supported built-in tools | `filesystem`, `github`, `Read`, `Bash` |
 | **Asset** | Discovered sensitive files and source repositories | `~/.ssh/id_rsa`, `.env`, a local Git repository |
 | **Impact** | Potential consequences inferred from capabilities and environment checks | `System-Takeover`, `Internet-Exfiltration`, `Supply-Chain-Contamination` |
 
 **Edges:** `Influences` (Source → Agent) · `HasCapability` (Agent → Capability) · `CanAccess` (Capability → Asset) · `Triggers` (Capability → Impact)
 
-### Facts vs. guesses
+---
 
-BloodHound is built to show verified access facts, so Agent-Hound is explicit about how sure it is. Every derived `CanAccess` / `Triggers` edge carries two properties you can query in BloodHound:
+## Connecting to an AD Graph
 
-* `confidence` — `confirmed` when the claim comes from a fact in the config (a known MCP package such as `@modelcontextprotocol/server-filesystem`, a shell binary, a hook definition), `suspected` when it comes from a name-based heuristic only.
-* `evidence` — what produced the edge, e.g. `package:@modelcontextprotocol/server-github (push_files / create_or_update_file via GitHub API)` or `keyword:file`.
+Agent-Hound graphs can connect to AD graphs in BloodHound. On Windows, `--process-identity` collects Claude Code's user SID for a `RunsAs` link. `RunsOn` also needs the computer SID. 
 
-Known packages are matched against a verified capability registry (`src/agenthound/discovery/profiles.py`), and `server-filesystem`-style allowed directories restrict `CanAccess` to assets inside those directories.
+<p align="center">
+  <img src="img/ad-pathfinding-poc.png" alt="PoC BloodHound path from README.md through Claude Code to an AD group" width="100%"/>
+</p>
 
-```cypher
-MATCH p=()-[r:CanAccess|Triggers]->() WHERE r.confidence = 'confirmed' RETURN p
-```
+
 
 ---
 
@@ -56,9 +55,8 @@ The following scenarios illustrate how to interpret the graph. Agent-Hound ident
 ### Shell Execution via Malicious Instructions
 
 * **The Threat:** Malicious `.cursorrules` or instructions in a repo tricking an agent into executing shell commands.
-* **Hound Path:** `Source: README.md` → `Agent` → `Capability: shell-capable MCP server or command hook` → `Impact: SYSTEM-TAKEOVER`.
-* **Inference:** A configured command hook or MCP server classified as shell-capable produces a potential system-takeover impact. This does not establish that source content can control the command or bypass approval.
-
+* **Hound Path:** `Source: README.md` → `Agent` → `Capability: shell-capable MCP server or explicitly allowed built-in Bash` → `Impact: SYSTEM-TAKEOVER`.
+* **Inference:** A shell-capable MCP server or an observed whole-tool `Bash` allow produces a suspected system-takeover impact. 
 ### Data Exfiltration
 
 * **The Threat:** An IPI forcing the agent to leak secrets via a hidden web request.
@@ -86,9 +84,6 @@ source .venv/bin/activate
 python -m pip install .
 agenthound --help
 ```
-
-On Windows, activate the virtual environment with `.venv\Scripts\Activate.ps1` in PowerShell.
-
 ### CLI Summary
 
 Select a configuration file and explicitly specify the project workspace. For Claude Desktop (the config path below is the Linux path recognized by the collector):
@@ -159,8 +154,7 @@ The CLI's `IPI source(s)` message lists candidate input files, and `Exfiltration
    MATCH p=(s:Source)-[*]->(i:Impact) RETURN p
    ```
 
-See [query.md](query.md) for node properties, edge types, asset reachability, exfiltration paths, and capability choke-point queries. For a graph preview without a live scan, the repository includes [sample output](examples/sample_output.json) and a [demo graph](examples/demo.json); these files are examples, not findings about your environment.
-
+See [query.md](query.md) for example cypher queries. For a graph preview without a live scan, the repository includes [sample output](examples/sample_output.json) and a [demo graph](examples/demo.json); 
 ---
 
 ## Disclaimer

@@ -56,10 +56,14 @@ def collect_claude_settings(paths: list[Path], workspace: Path) -> tuple[Agent, 
     caps.extend(mcps)
     updated = []
     for cap in caps:
-        if cap.cap_kind == "BuiltInTool":
+        if cap.cap_kind == "BuiltInTool" and cap.name == "Read":
             cap = cap.model_copy(update={
                 "read_policy_sources": sources or [{"path": "no permission settings observed", "anchor": str(workspace), "permissions": {}}], "read_workspace": str(workspace),
                 "file_evidence": cap.file_evidence + "; observed settings:" + ",".join(s["path"] for s in sources),
+            })
+        elif cap.cap_kind == "BuiltInTool" and cap.name == "Bash":
+            cap = cap.model_copy(update={
+                "shell_evidence": cap.shell_evidence + "; observed settings:" + ",".join(s["path"] for s in sources),
             })
         updated.append(cap)
     return agent, updated

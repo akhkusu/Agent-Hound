@@ -3,14 +3,14 @@ from agenthound.models.nodes import Capability
 
 
 def test_shell_cap_triggers_system_takeover():
-    cap = Capability(name="bash-hook", cap_kind="ShellHook", has_shell=True)
+    cap = Capability(name="bash", cap_kind="BuiltInTool", shell_exec="suspected")
     result = collect_impact(capabilities=[cap], internet_reachable=True)
     kinds = {i.impact_kind for i in result.impacts}
     assert "SystemTakeover" in kinds
 
 
 def test_system_takeover_edge_from_shell_cap():
-    cap = Capability(name="bash-hook", cap_kind="ShellHook", has_shell=True)
+    cap = Capability(name="bash", cap_kind="BuiltInTool", shell_exec="suspected")
     result = collect_impact(capabilities=[cap], internet_reachable=True)
     takeover = next(i for i in result.impacts if i.impact_kind == "SystemTakeover")
     edges = [e for e in result.edges if e.end == takeover.objectid]
@@ -54,9 +54,14 @@ def test_no_relevant_caps_no_impacts():
 
 
 def test_triggers_edge_kind():
-    cap = Capability(name="bash-hook", cap_kind="ShellHook", has_shell=True)
+    cap = Capability(name="bash", cap_kind="BuiltInTool", shell_exec="suspected")
     result = collect_impact(capabilities=[cap], internet_reachable=False)
     assert all(e.kind == "Triggers" for e in result.edges)
+
+
+def test_fixed_hook_does_not_imply_system_takeover():
+    cap = Capability(name="hook:PreToolUse:Bash", cap_kind="ShellHook")
+    assert not collect_impact([cap], internet_reachable=False).impacts
 
 
 def test_git_scoped_to_unrelated_repo_no_supply_chain(tmp_path):

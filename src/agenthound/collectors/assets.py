@@ -12,7 +12,9 @@ from agenthound.models.nodes import Asset, Capability
 
 
 def _is_privileged(cap: Capability) -> bool:
-    if cap.shell_exec != "none" or cap.cap_kind == "ShellHook":
+    if cap.cap_kind == "ShellHook":
+        return False
+    if cap.shell_exec != "none":
         return True
     return cap.file_access != "none"
 
@@ -40,7 +42,7 @@ def _can_access(cap: Capability, asset: Asset) -> bool:
     # wrongly skipped writable assets for read-only caps).
     # Shell capabilities can reach any path; file scoping only constrains
     # capabilities whose access comes from a scoped file server.
-    if cap.shell_exec != "none" or cap.cap_kind == "ShellHook":
+    if cap.shell_exec != "none":
         return True
     if cap.allowed_paths is not None:
         return _in_allowed_paths(asset.path, cap.allowed_paths)
@@ -49,7 +51,7 @@ def _can_access(cap: Capability, asset: Asset) -> bool:
 
 def _edge_properties(cap: Capability) -> dict[str, str]:
     confidence: str
-    if cap.shell_exec != "none" or cap.cap_kind == "ShellHook":
+    if cap.shell_exec != "none":
         confidence, evidence = cap.shell_exec, cap.shell_evidence
     else:
         confidence, evidence = cap.file_access, cap.file_evidence

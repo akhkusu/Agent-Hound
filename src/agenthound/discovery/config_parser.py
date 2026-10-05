@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from agenthound.discovery.builtin_read import read_capability
+from agenthound.discovery.builtin_bash import bash_capability
 from agenthound.discovery.claude_mcp import claude_mcp_paths, mcp_capabilities
 
 from agenthound.discovery.profiles import (
@@ -229,9 +230,8 @@ def _parse_hooks(hooks_dict: dict[str, Any], agent_scope: str) -> list[Capabilit
                         name=f"hook:{event}:{matcher}",
                         cap_kind="ShellHook",
                         command=hook.get("command"),
-                        has_shell=True,
                         agent_scope=agent_scope,
-                        shell_evidence=f"hook:{event}",
+                        shell_evidence=f"hook:{event}; fixed command handler, not an agent-controlled shell tool",
                     ))
     return caps
 
@@ -282,6 +282,9 @@ def parse_config_data(config_path: Path, raw: dict[str, Any], agent: Agent | Non
 
     if agent.name == "claude-code":
         builtin = read_capability(agent, raw)
+        if builtin is not None:
+            caps.append(builtin)
+        builtin = bash_capability(agent, raw)
         if builtin is not None:
             caps.append(builtin)
 

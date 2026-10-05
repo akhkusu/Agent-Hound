@@ -74,13 +74,13 @@ def collect_impact(
 ) -> CollectionResult:
     result = CollectionResult()
 
-    shell_caps = [c for c in capabilities if c.shell_exec != "none" or c.cap_kind == "ShellHook"]
+    shell_caps = [c for c in capabilities if c.shell_exec != "none" and c.cap_kind != "ShellHook"]
     if shell_caps:
         impact = Impact(
             name="system-takeover",
             impact_kind="SystemTakeover",
             reachable=True,
-            description="Agent can execute arbitrary shell commands",
+            description="Potential shell command execution; runtime policy and identity are unverified",
         )
         result.impacts.append(impact)
         for cap in shell_caps:

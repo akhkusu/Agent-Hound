@@ -18,14 +18,21 @@ def test_collect_assets_finds_ssh_key(tmp_path):
     assert "SSHKey" in kinds
 
 
-def test_privileged_cap_gets_can_access_edge(tmp_path):
+def test_shell_cap_gets_can_access_edge(tmp_path):
     (tmp_path / ".env").write_text("X=1")
-    cap = Capability(name="bash-hook", cap_kind="ShellHook", has_shell=True)
+    cap = Capability(name="bash", cap_kind="BuiltInTool", shell_exec="suspected")
     result = collect_assets(capabilities=[cap], workspace=tmp_path, scope="workspace")
     edges = [e for e in result.edges if e.kind == "CanAccess"]
     assert len(edges) == len(result.assets)
     for edge in edges:
         assert edge.start == cap.objectid
+
+
+def test_fixed_hook_does_not_infer_asset_access(tmp_path):
+    (tmp_path / ".env").write_text("X=1")
+    cap = Capability(name="hook:PreToolUse:Bash", cap_kind="ShellHook")
+    result = collect_assets(capabilities=[cap], workspace=tmp_path, scope="workspace")
+    assert not result.edges
 
 
 def test_non_privileged_cap_gets_no_can_access_edge(tmp_path):

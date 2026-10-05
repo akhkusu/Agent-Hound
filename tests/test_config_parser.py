@@ -40,11 +40,11 @@ def test_parse_claude_code_settings():
     assert "ShellHook" in cap_kinds
 
 
-def test_claude_code_hooks_have_shell():
+def test_claude_code_hooks_are_not_arbitrary_shell_tools():
     _, caps = parse_config(FIXTURES / "claude_code_settings.json")
     hooks = [c for c in caps if c.cap_kind == "ShellHook"]
     assert len(hooks) == 2
-    assert all(h.has_shell for h in hooks)
+    assert all(not h.has_shell and h.shell_exec == "none" for h in hooks)
 
 
 def test_parse_vscode_config():
@@ -124,11 +124,11 @@ def test_shell_binary_launcher_detected_case_insensitive(tmp_path):
     assert caps[0].shell_evidence.startswith("shell-binary-launcher:")
 
 
-def test_hooks_remain_confirmed_shell(tmp_path):
-    # Hooks execute configured commands on events — a real, confirmed capability.
+def test_hooks_remain_visible_without_arbitrary_shell_claim(tmp_path):
     _, caps = parse_config(FIXTURES / "claude_code_settings.json")
     hooks = [c for c in caps if c.cap_kind == "ShellHook"]
-    assert hooks and all(h.shell_exec == "confirmed" for h in hooks)
+    assert hooks and all(h.shell_exec == "none" for h in hooks)
+    assert all("fixed command handler" in h.shell_evidence for h in hooks)
 
 
 def test_data_arg_does_not_seed_keyword(tmp_path):

@@ -101,7 +101,8 @@ def test_mcp_hooks_coexist_and_deduplicate(tmp_path):
     assert {c.cap_kind for c in result.capabilities} == {'BuiltInTool', 'MCPServer', 'ShellHook'}
     assert len(result.capabilities) == 3
     assets = collect_assets(result.capabilities, workspace, 'workspace')
-    assert len(assets.edges) == 3
+    assert len(assets.edges) == 2
+    assert not any(edge.start == next(cap.objectid for cap in result.capabilities if cap.cap_kind == 'ShellHook') for edge in assets.edges)
 
 
 def test_cli_real_graph(tmp_path, monkeypatch):

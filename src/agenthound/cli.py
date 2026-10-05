@@ -15,6 +15,7 @@ from agenthound.collectors.capabilities import collect_from_configs
 from agenthound.collectors.impact import check_internet, collect_impact
 from agenthound.collectors.sources import collect_sources
 from agenthound.discovery.config_parser import discover_config_files
+from agenthound.discovery.runtime_identity import RuntimeIdentityError, observe_claude_pid
 from agenthound.models.edges import Edge
 from agenthound.output.opengraph import build_opengraph, write_opengraph
 from agenthound.platforms import CUSTOM_TYPES
@@ -31,10 +32,12 @@ console = Console()
 @click.option("--output", "-o", type=click.Path(path_type=Path), default="agenthound_output.json",
               show_default=True, help="Output file path.")
 @click.option("--verbose", "-v", is_flag=True)
+@click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
+@click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
 @click.version_option(version=__version__)
 @click.pass_context
 def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
-        output: Path, verbose: bool) -> None:
+        output: Path, verbose: bool, claude_pid: int | None, process_identity: bool) -> None:
     """Agent-Hound — BloodHound OpenGraph collector for AI agent attack paths."""
     ctx.ensure_object(dict)
     ctx.obj.update({"workspace": workspace, "scope": scope, "output": output, "verbose": verbose})
@@ -42,7 +45,8 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
         if config is None:
             click.echo(ctx.get_help())
             return
-        _run_scan([config], workspace, scope, output, verbose)
+        _run_scan([config], workspace, scope, output, verbose, claude_pid=claude_pid,
+                  process_identity=process_identity)
 
 
 @cli.command()
@@ -53,7 +57,10 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
 @click.option("--output", "-o", type=click.Path(path_type=Path), default="agenthound_output.json",
               show_default=True)
 @click.option("--verbose", "-v", is_flag=True)
-def discover(workspace: Path, scope: str, output: Path, verbose: bool) -> None:
+@click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
+@click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
+def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pid: int | None,
+             process_identity: bool) -> None:
     """Discover configs; merge Claude user/shared/local settings for this workspace."""
     config_paths = discover_config_files(workspace)
     if not config_paths:
@@ -63,15 +70,32 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool) -> None:
         console.print(f"[blue]Found {len(config_paths)} config file(s)[/blue]")
         for p in config_paths:
             console.print(f"  {p}")
-    _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=True)
+    _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=True,
+              claude_pid=claude_pid, process_identity=process_identity)
 
 
 def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,
-              merge_claude: bool = False) -> None:
+              merge_claude: bool = False, claude_pid: int | None = None,
+              process_identity: bool = False) -> None:
+    if process_identity and claude_pid is not None:
+        raise click.ClickException("Use either --process-identity or --claude-pid, not both")
     console.print(f"[bold blue]Agent-Hound v{__version__}[/bold blue]")
     console.print()
 
     cap_result = collect_from_configs(config_paths, workspace=workspace if merge_claude else None)
+    if process_identity or claude_pid is not None:
+        claude_agents = [agent for agent in cap_result.agents if agent.name == "claude-code"]
+        if len(claude_agents) != 1:
+            raise click.ClickException("Runtime observation requires exactly one Claude Code agent in the scan")
+        try:
+            identity = observe_claude_pid(claude_pid)
+        except RuntimeIdentityError as exc:
+            raise click.ClickException(str(exc)) from exc
+        cap_result.agents = [
+            agent.model_copy(update={"runtime_pid": identity.pid, "runtime_owner_sid": identity.owner_sid,
+                                     "runtime_observed_at": identity.observed_at})
+            if agent == claude_agents[0] else agent for agent in cap_result.agents
+        ]
     internet = check_internet()
 
     if verbose:

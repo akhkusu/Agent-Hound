@@ -30,6 +30,9 @@ class Agent(BaseModel):
     name: str
     platform: str
     config_path: str
+    runtime_pid: int | None = None
+    runtime_owner_sid: str | None = None
+    runtime_observed_at: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -37,15 +40,23 @@ class Agent(BaseModel):
         return _hash_id("agent", self.name, self.config_path)
 
     def to_opengraph(self) -> dict[str, Any]:
+        properties: dict[str, Any] = {
+            "name": self.name.upper(),
+            "displayname": self.platform,
+            "platform": self.platform,
+            "config_path": self.config_path,
+        }
+        if self.runtime_pid is not None and self.runtime_owner_sid is not None:
+            properties.update(
+                runtime_pid=self.runtime_pid,
+                runtime_owner_sid=self.runtime_owner_sid,
+                runtime_observed_at=self.runtime_observed_at,
+                runtime_identity_evidence="Win32_Process.GetOwnerSid for selected claude.exe PID",
+            )
         return {
             "id": self.objectid,
             "kinds": ["Agent"],
-            "properties": {
-                "name": self.name.upper(),
-                "displayname": self.platform,
-                "platform": self.platform,
-                "config_path": self.config_path,
-            },
+            "properties": properties,
         }
 
 
