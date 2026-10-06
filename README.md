@@ -38,7 +38,17 @@ Agent-Hound models this chain as five interconnected node types, producing a gra
 
 ## Connecting to an AD Graph
 
-Agent-Hound graphs can connect to AD graphs in BloodHound. On Windows, `--process-identity` collects Claude Code's user SID for a `RunsAs` link. `RunsOn` also needs the computer SID. 
+Agent-Hound graphs can connect to AD graphs in BloodHound for Windows. First, run Claude Code then scan the project:
+
+```powershell
+cd C:\path\to\Agent-Hound
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\agenthound.exe discover -w C:\path\to\project --process-identity -o agent.json
+.\.venv\Scripts\agenthound.exe ad-bridge --agent-graph agent.json --ad-zip C:\path\to\sharphound.zip -o ad-bridge.json
+```
+
+For Cypher visualization in BloodHound, import the matching SharpHound ZIP, then `agent.json` and `ad-bridge.json`. The bridge emits `AH_RunsAs` / `AH_RunsOn` only for exact SID matches; missing matches produce no edge.
 
 <p align="center">
   <img src="img/ad-pathfinding-poc.png" alt="PoC BloodHound path from README.md through Claude Code to an AD group" width="100%"/>
@@ -161,7 +171,7 @@ The CLI's `IPI source(s)` message lists candidate input files, and `Exfiltration
    MATCH p=(s:Source)-[*]->(i:Impact) RETURN p
    ```
 
-See [query.md](query.md) for example cypher queries. For a graph preview without a live scan, the repository includes [sample output](examples/sample_output.json) and a [demo graph](examples/demo.json); 
+See [query.md](query.md) for example Cypher queries. For a graph preview without a live scan, see the [sample output](examples/sample_output.json) and [demo graph](examples/demo.json).
 ---
 
 ## Disclaimer

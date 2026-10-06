@@ -32,6 +32,17 @@ def test_observe_sole_claude_process(monkeypatch):
     assert runtime_identity.observe_claude_pid().pid == 21088
 
 
+def test_observe_computer_sid(monkeypatch):
+    monkeypatch.setattr(runtime_identity.sys, "platform", "win32")
+    monkeypatch.setattr(
+        runtime_identity.subprocess,
+        "run",
+        lambda *args, **kwargs: CompletedProcess(args[0], 0, '{"pid":21088,"name":"claude.exe","sid":"S-1-5-21-1-2-3-1104","computer_sid":"S-1-5-21-1-2-3-1162"}', ""),
+    )
+    observed = runtime_identity.observe_claude_pid()
+    assert observed.computer_sid == "S-1-5-21-1-2-3-1162"
+
+
 @pytest.mark.parametrize("response", [
     CompletedProcess([], 2, "", "failure"),
     CompletedProcess([], 0, '{"pid":21089,"name":"claude.exe","sid":"S-1-5-21-1"}', ""),

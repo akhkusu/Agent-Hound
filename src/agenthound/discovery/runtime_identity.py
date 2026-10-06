@@ -22,6 +22,7 @@ class RuntimeIdentity:
     pid: int
     owner_sid: str
     observed_at: str
+    computer_sid: str | None = None
 
 
 def observe_claude_pid(pid: int | None = None) -> RuntimeIdentity:
@@ -40,8 +41,15 @@ def observe_claude_pid(pid: int | None = None) -> RuntimeIdentity:
         "if ($null -eq $process -or $process.Name -ne 'claude.exe') { exit 2 }; "
         "$owner = Invoke-CimMethod -InputObject $process -MethodName GetOwnerSid; "
         "if ($owner.ReturnValue -ne 0 -or [string]::IsNullOrWhiteSpace($owner.Sid)) { exit 3 }; "
+        "$computerSid = $null; "
+        "try { "
+        "$system = Get-CimInstance Win32_ComputerSystem; "
+        "if ($system.PartOfDomain) { "
+        "$account = [System.Security.Principal.NTAccount]::new($system.Domain, ($env:COMPUTERNAME + '$')); "
+        "$computerSid = $account.Translate([System.Security.Principal.SecurityIdentifier]).Value "
+        "} } catch { $computerSid = $null }; "
         "[pscustomobject]@{ pid = $process.ProcessId; name = $process.Name; "
-        "sid = $owner.Sid } | ConvertTo-Json -Compress"
+        "sid = $owner.Sid; computer_sid = $computerSid } | ConvertTo-Json -Compress"
     )
     try:
         result = subprocess.run(
@@ -59,6 +67,9 @@ def observe_claude_pid(pid: int | None = None) -> RuntimeIdentity:
         sid = observed["sid"]
         if not isinstance(observed["pid"], int) or not isinstance(sid, str) or _SID.fullmatch(sid) is None:
             raise ValueError("invalid owner SID")
+        computer_sid = observed.get("computer_sid")
+        if computer_sid is not None and (not isinstance(computer_sid, str) or _SID.fullmatch(computer_sid) is None):
+            raise ValueError("invalid computer SID")
     except (ValueError, KeyError, TypeError) as exc:
         raise RuntimeIdentityError("Invalid Claude process identity response") from exc
-    return RuntimeIdentity(pid=observed["pid"], owner_sid=sid, observed_at=datetime.now(timezone.utc).isoformat())
+    return RuntimeIdentity(pid=observed["pid"], owner_sid=sid, observed_at=datetime.now(timezone.utc).isoformat(), computer_sid=computer_sid)

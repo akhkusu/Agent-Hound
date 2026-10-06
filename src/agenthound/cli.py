@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import zipfile
 
 import click
 from rich.console import Console
@@ -17,6 +18,7 @@ from agenthound.collectors.sources import collect_sources
 from agenthound.discovery.config_parser import discover_config_files
 from agenthound.discovery.runtime_identity import RuntimeIdentityError, observe_claude_pid
 from agenthound.models.edges import Edge
+from agenthound.output.ad_bridge import build_ad_bridge
 from agenthound.output.opengraph import build_opengraph, write_opengraph
 from agenthound.platforms import CUSTOM_TYPES
 
@@ -74,6 +76,22 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pi
               claude_pid=claude_pid, process_identity=process_identity)
 
 
+@cli.command("ad-bridge")
+@click.option("--agent-graph", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--ad-zip", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--output", "-o", type=click.Path(path_type=Path), required=True)
+def ad_bridge(agent_graph: Path, ad_zip: Path, output: Path) -> None:
+    """Create AD edges only for observed SIDs found in SharpHound data."""
+    import json
+
+    try:
+        payload = build_ad_bridge(json.loads(agent_graph.read_text(encoding="utf-8")), ad_zip)
+    except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile) as exc:
+        raise click.ClickException(str(exc)) from exc
+    write_opengraph(payload, str(output))
+    click.echo(f"Output written to {output} ({len(payload['graph']['edges'])} verified AD link(s))")
+
+
 def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,
               merge_claude: bool = False, claude_pid: int | None = None,
               process_identity: bool = False) -> None:
@@ -93,7 +111,8 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
             raise click.ClickException(str(exc)) from exc
         cap_result.agents = [
             agent.model_copy(update={"runtime_pid": identity.pid, "runtime_owner_sid": identity.owner_sid,
-                                     "runtime_observed_at": identity.observed_at})
+                                     "runtime_observed_at": identity.observed_at,
+                                     "runtime_computer_sid": identity.computer_sid})
             if agent == claude_agents[0] else agent for agent in cap_result.agents
         ]
     internet = check_internet()

@@ -33,6 +33,7 @@ class Agent(BaseModel):
     runtime_pid: int | None = None
     runtime_owner_sid: str | None = None
     runtime_observed_at: str | None = None
+    runtime_computer_sid: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -53,6 +54,8 @@ class Agent(BaseModel):
                 runtime_observed_at=self.runtime_observed_at,
                 runtime_identity_evidence="Win32_Process.GetOwnerSid for selected claude.exe PID",
             )
+            if self.runtime_computer_sid is not None:
+                properties["runtime_computer_sid"] = self.runtime_computer_sid
         return {
             "id": self.objectid,
             "kinds": ["Agent"],
