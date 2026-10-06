@@ -4,12 +4,14 @@
   <img src="img/logo.png" width="300" alt="Agent-Hound Logo"/>
 </p>
 
-**Discover Attack Paths in AI Agent Environments.**
+<p align="center"><strong>Discover Attack Paths in AI Agent Environments.</strong></p>
 
-[![BloodHound OpenGraph](https://img.shields.io/badge/BloodHound-OpenGraph-E31B23)](https://bloodhound.specterops.io/opengraph/overview)
-[![AI Agent Security](https://img.shields.io/badge/AI-Agent%20Security-6f42c1)](#graph-model)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<p align="center">
+  <a href="https://bloodhound.specterops.io/opengraph/overview"><img src="https://img.shields.io/badge/BloodHound-OpenGraph-E31B23" alt="BloodHound OpenGraph"/></a>
+  <a href="#graph-model"><img src="https://img.shields.io/badge/AI-Agent%20Security-6f42c1" alt="AI Agent Security"/></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&amp;logoColor=white" alt="Python 3.10+"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"/></a>
+</p>
 
 **Agent-Hound** maps potential **Indirect Prompt Injection (IPI)** attack paths in AI agent environments such as Claude Code and Codex. It builds a graph from agent configuration, local source files, sensitive file locations, and connectivity checks so you can inspect where untrusted inputs meet privileged capabilities.
 
