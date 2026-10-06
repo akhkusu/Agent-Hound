@@ -4,7 +4,12 @@
   <img src="img/logo.png" width="300" alt="Agent-Hound Logo"/>
 </p>
 
-**Discover the Attack Paths Created by AI Agents.**
+**Discover Attack Paths in AI Agent Environments.**
+
+[![BloodHound OpenGraph](https://img.shields.io/badge/BloodHound-OpenGraph-E31B23)](https://bloodhound.specterops.io/opengraph/overview)
+[![AI Agent Security](https://img.shields.io/badge/AI-Agent%20Security-6f42c1)](#graph-model)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Agent-Hound** maps potential **Indirect Prompt Injection (IPI)** attack paths in AI agent environments such as Claude Code and Codex. It builds a graph from agent configuration, local source files, sensitive file locations, and connectivity checks so you can inspect where untrusted inputs meet privileged capabilities.
 
@@ -12,13 +17,9 @@ Built on the [SpecterOps OpenGraph](https://specterops.io/opengraph/) specificat
 
 ---
 
-## The Concept: Source-to-Impact
+## Graph Model
 
-An AI agent working in your project reads a lot: `README.md`, `CLAUDE.md`, `AGENTS.md`, open GitHub issues, runbooks. Any of these can carry a hidden instruction planted by an attacker — this is **Indirect Prompt Injection**. On its own, that's just text. The danger is what the agent can *do* from there.
-
-That same agent may have shell access, can push to git, can make outbound HTTP requests, and can read files like `~/.ssh/id_rsa` or `.env`. A poisoned source becomes the first step of a full attack chain — ending in data exfiltration, system takeover, or supply chain contamination.
-
-Agent-Hound models this chain as five interconnected node types, producing a graph you can explore in BloodHound:
+Agent-Hound models AI agent environments as five node types connected by four edge types, then exports the graph to BloodHound OpenGraph:
 
 <p align="center">
   <img src="img/demo.png" alt="Agent-Hound graph in BloodHound" width="100%"/>
@@ -36,51 +37,6 @@ Agent-Hound models this chain as five interconnected node types, producing a gra
 
 ---
 
-## Connecting to an AD Graph
-
-Agent-Hound graphs can connect to AD graphs in BloodHound for Windows. First, run Claude Code then scan the project:
-
-```powershell
-cd C:\path\to\Agent-Hound
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
-.\.venv\Scripts\agenthound.exe discover -w C:\path\to\project --process-identity -o agent.json
-.\.venv\Scripts\agenthound.exe ad-bridge --agent-graph agent.json --ad-zip C:\path\to\sharphound.zip -o ad-bridge.json
-```
-
-For Cypher visualization in BloodHound, import the matching SharpHound ZIP, then `agent.json` and `ad-bridge.json`. The bridge emits `AH_RunsAs` / `AH_RunsOn` only for exact SID matches; missing matches produce no edge.
-
-<p align="center">
-  <img src="img/ad-pathfinding-poc.png" alt="PoC BloodHound path from README.md through Claude Code to an AD group" width="100%"/>
-</p>
-
-
-
----
-
-## Exploring Potential Attack Scenarios
-
-The following scenarios illustrate how to interpret the graph. Agent-Hound identifies conditions that could enable an attack; it does not detect malicious instructions, execute payloads, or verify that an exploit succeeds.
-
-### Shell Execution via Malicious Instructions
-
-* **The Threat:** Malicious `.cursorrules` or instructions in a repo tricking an agent into executing shell commands.
-* **Hound Path:** `Source: README.md` → `Agent` → `Capability: shell-capable MCP server or explicitly allowed built-in Bash` → `Impact: SYSTEM-TAKEOVER`.
-* **Inference:** A shell-capable MCP server or an observed whole-tool `Bash` allow produces a suspected system-takeover impact. 
-### Data Exfiltration
-
-* **The Threat:** An IPI forcing the agent to leak secrets via a hidden web request.
-* **Hound Path:** `Source: README.md` → `Agent` → `Capability: remote` → `Impact: INTERNET-EXFILTRATION`. Inspect `CanAccess` branches separately for potential access to secrets such as `.env`.
-* **Inference:** A capability whose name or command matches network keywords, together with a successful outbound connectivity check, produces a potential exfiltration impact. It does not confirm that the same capability can read a secret or reach an attacker's endpoint. GitHub Issues are a conceptual IPI source, but the current CLI does not fetch them.
-
-### Supply Chain Contamination
-
-* **The Threat:** AI agents writing backdoored code because they trusted a malicious project doc.
-* **Hound Path:** `Source: CLAUDE.md` → `Agent` → `Capability: github` → `Impact: SUPPLY-CHAIN-CONTAMINATION`.
-* **Inference:** A capability whose name or command contains `git`, together with a discovered local repository that has a configured remote, produces a potential supply-chain impact. Repository write permissions, authentication, branch protections, and the ability to push are not verified.
-
----
-
 
 ## Usage
 
@@ -94,84 +50,30 @@ source .venv/bin/activate
 python -m pip install .
 agenthound --help
 ```
-### CLI Summary
 
-Select a configuration file and explicitly specify the project workspace. For Claude Desktop (the config path below is the Linux path recognized by the collector):
-
-```bash
-agenthound --config ~/.config/Claude/claude_desktop_config.json \
-  --workspace /srv/myproject --scope all -o output.json -v
-```
-
-The collector also recognizes `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%\Claude\claude_desktop_config.json` on Windows. Use the path to your actual config file and quote paths containing spaces.
-
-For Claude Code:
-
-```bash
-agenthound --config ~/.claude/settings.json \
-  --workspace /srv/myproject --scope all -o output.json -v
-```
-
-Each `-c`/`--config` command reads only the specified file; it never implicitly reads user, shared, or local settings. To discover other agent configurations and merge Claude Code settings for the selected project:
-
-```bash
-agenthound discover --workspace /srv/myproject --scope all -o output.json -v
-```
-
-For a project-local Codex config:
+### Scan a Project
 
 ```bash
 cd /path/to/project
-agenthound -c .codex/config.toml -w . --scope workspace -o codex-graph.json -v
+agenthound discover -o output.json -v
 ```
 
-| Scope | Source collection | Asset collection |
-| :--- | :--- | :--- |
-| `workspace` | Selected workspace | Selected workspace |
-| `global` | Skipped | Known credential directories and top-level sensitive files in the home directory |
-| `all` (default) | Selected workspace | Workspace plus global asset locations |
+`discover` automatically reads supported configuration files from the home directory and project. For additional options, run `agenthound --help` or `agenthound discover --help`.
 
-Configuration parsing and the connectivity check run for every scope. Without `--workspace`, the workspace defaults to the current directory.
+### Import into BloodHound
 
-Illustrative output (counts and findings depend on your configuration and files):
-
-```text
-$ agenthound --config ~/.config/Claude/claude_desktop_config.json --workspace /srv/myproject --scope all -o output.json -v
-
-Agent-Hound v0.1.0
-
-        Scope Summary
-┏━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Pillar        ┃ Scanning                 ┃
-┡━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ Capabilities  │ claude_desktop_config.json│
-│ Sources       │ /srv/myproject           │
-│ Assets        │ home dir + /srv/myproject │
-│ Impact        │ connectivity=reachable + shell + git│
-└───────────────┴───────────────────────────┘
-
-Output written to output.json
-  Nodes: 9 | Edges: 11
-
-Security Findings:
-  3 IPI source(s): README.md, CLAUDE.md, notes.txt
-  2 asset(s) reachable via shell capability
-  Exfiltration path detected: internet is reachable
-```
-
-The CLI's `IPI source(s)` message lists candidate input files, and `Exfiltration path detected` reports an inferred risk condition. Neither message confirms malicious content or an actual data leak.
-
-### Importing to BloodHound
-
-1. Run Agent-Hound to generate `output.json`.
-2. Open **BloodHound CE** (v8.0+).
-3. Use **File Ingest** to upload the JSON.
-4. Run Cypher queries to find paths:
-   ```cypher
-   MATCH p=(s:Source)-[*]->(i:Impact) RETURN p
-   ```
+Open **BloodHound CE** (v8.0+), go to **File Ingest**, and upload the generated OpenGraph JSON. Explore the graph using Search or Cypher.
 
 See [query.md](query.md) for example Cypher queries. For a graph preview without a live scan, see the [sample output](examples/sample_output.json) and [demo graph](examples/demo.json).
+
+## Connecting to an AD Graph
+
+Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace paths from AI agent environments to AD users, computers, and groups. See the [AD integration guide](docs/ad-integration.md).
+
+<p align="center">
+  <img src="img/ad-pathfinding-poc.png" alt="PoC BloodHound path from README.md through Claude Code to an AD group" width="100%"/>
+</p>
+
 ---
 
 ## Disclaimer
