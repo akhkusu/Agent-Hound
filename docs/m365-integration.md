@@ -2,6 +2,14 @@
 
 Agent-Hound separates local application observations, cloud permissions, and evidence that Copilot actually references a document. Finding a profile or a policy cache does not establish a licensed capability or an attack path.
 
+## Unified collection
+
+Use `agenthound discover --m365 -o combined_graph.json` to include local agents, Copilot observations and live SharePoint file metadata in one export. Use `--site-url` to scope cloud enumeration and `--limit` to change the default 20 retained files. Authentication remains opt-in through `--m365`.
+
+Use `agenthound discover --m365-snapshot examples/m365_snapshot.json -o combined_graph.json` to combine local observations with existing ACL/retrieval evidence without cloud requests. Each document is displayed by its original filename in the graph and terminal Attack Paths preview. The example is synthetic.
+
+The commands below remain focused inventory/import tools for compatibility and troubleshooting.
+
 ## Inventory Windows application data
 
 For live cloud file metadata, use [SharePoint file listing](m365-files.md). Its [authentication reference](copilot-sharepoint-auth.md) describes account selection and service-specific token requests. The inventory below observes local configuration and does not authenticate or retrieve cloud files.
@@ -43,7 +51,7 @@ For authored M365 declarative agents, Microsoft's documented configuration is `a
 agenthound m365-import --snapshot examples/m365_snapshot.json -o m365_graph.json
 ```
 
-The example is a **synthetic scenario**, not a live tenant export. Its five documents mirror the ORION dataset: overview, meeting minutes, acquisition, customer pricing and staffing. An editor can modify the minutes. An executive can read the restricted documents and uses an agent configured with the minutes. The resulting graph is a candidate IPI path, not evidence of exploitation.
+The example is a **synthetic scenario**, not a live tenant export. Its five documents mirror the ORION dataset: overview, meeting minutes, acquisition, customer pricing and staffing. An editor can modify the minutes. An executive can read the restricted documents and uses an agent configured with the minutes. The resulting graph contains candidate IPI paths from the minutes through Copilot to accessible documents. Editor identities and ACL relations are analysis inputs, not displayed nodes or edges. This is not evidence of exploitation.
 
 The version-1 JSON schema is implemented by `M365Snapshot` in `discovery/m365_snapshot.py`. It rejects extra fields, invalid roles, duplicate entity IDs and unresolved references. It contains:
 
@@ -63,13 +71,16 @@ For example, pasting a SharePoint link into Copilot can resolve the file into ch
 
 | Relation | Meaning |
 | --- | --- |
-| `M365Principal → MemberOf → M365Principal` | Observed membership |
-| `M365Principal → CanRead/CanWrite/Owns → Source + Asset` | Observed positive permission |
-| `Agent → RunsAs → M365Principal` | Explicit observed work-account binding |
 | `Agent → HasCapability → Capability → CanAccess → Source + Asset` | ACL-supported retrieval candidate (suspected), or observed document retrieval (confirmed) |
 | `Source + Asset → Influences → Agent` | Accessible document explicitly configured as a source (suspected), or observed retrieved (confirmed) |
 
-Documents use one node with both Source and Asset kinds. IDs are tenant scoped and based on resource IDs, so file rename does not replace the node. Register the `M365Principal` icon with `agenthound register-icons` alongside existing types.
+Documents use one node with both Source and Asset kinds. IDs are tenant scoped and based on resource IDs, so file rename does not replace the node. No M365-specific node or edge kinds are added. Principals, memberships and ACLs are used internally to compute the bound user's positive read reachability. `effective_principal` and `identity_evidence` remain on the Agent; `acl_evidence` and `acl_observed_at` preserve matching grant evidence on each `CanAccess` edge.
+
+Live `discover --m365` output uses the same complete candidate chain as local agents: `Source → Influences → Agent → HasCapability → Capability → CanAccess → Asset`. A retained document has both Source and Asset kinds. The Copilot node models the observed work-account context; its document-context capability, access and influence edges are suspected. They carry `requires_explicit_document_context: true`, `access_basis: copilot_document_context_candidate`, `metadata_access_verified: true`, and `retrieval_verified: false`. This models the possibility of explicitly supplying an available document, not a claim that Copilot has already consumed it or can browse autonomously. A confirmed REST download is separate evidence of account-level content access.
+
+The default document inventory includes visible content libraries such as Documents and Site Pages. It excludes hidden libraries and the infrastructure URL roots `_catalogs`, `FormServerTemplates`, `IWConvertedForms` and `Style Library`; it also skips the reserved `Forms` folder at each library root. A business library may have any title or file extension. `site_url`, `library` and `library_title` on document nodes retain its site/library context. Local desktop observations are not joined to cloud contexts by display name. Only retained file metadata becomes nodes; enumeration counts do not create unseen document nodes.
+
+This is a generic OpenGraph export for Cypher exploration. It does not register a structured extension or enable standard BloodHound Pathfinding. See the [official distinction](https://bloodhound.specterops.io/opengraph/developer/graph-data). Older branch exports containing `M365Principal`, `MemberOf`, `CanRead`, `CanWrite`, `Owns` or `RunsAs` should be replaced with a fresh export; this change does not delete data already ingested into BloodHound.
 
 Write and owner grants imply read. An empty grant list or incomplete collection does not prove denial. `classification` is supplied metadata; the collector does not infer confidentiality or enforce a sensitivity label. No exfiltration or shell-impact edge is inferred from a SharePoint read permission. Local desktop inventory is not automatically joined with a cloud agent by display name.
 

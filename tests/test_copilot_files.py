@@ -100,3 +100,43 @@ def test_verified_host_preserves_authentication_denial_without_trying_other_host
     with pytest.raises(auto.M365FilesError, match="AADSTS65002"):
         auto.collect_copilot_files()
     assert verified == [ORIGIN]
+
+
+def test_document_inventory_excludes_hidden_system_and_root_forms(monkeypatch):
+    configure(monkeypatch)
+
+    class Reader:
+        def __init__(self, *args):
+            pass
+
+        def get(self, url):
+            return {"value": [
+                {"Title": title, "Hidden": hidden, "RootFolder": {
+                    "ServerRelativeUrl": "/sites/team/" + root}}
+                for title, root, hidden in [
+                    ("Documents", "Shared Documents", False), ("Site Pages", "SitePages", False),
+                    ("Hidden", "PrivateCache", True), ("Templates", "_catalogs/masterpage", False),
+                    ("Form Templates", "FormServerTemplates", False), ("Styles", "Style Library", False),
+                ]
+            ]}
+
+    calls = []
+
+    def collect(**kwargs):
+        library, folder = kwargs["library"], kwargs["folder"]
+        calls.append((library, folder))
+        assert library in {"Shared Documents", "SitePages"}
+        assert folder != "Forms"
+        return {"items": [
+            {"kind": "folder", "name": "Forms"},
+            {"kind": "file", "name": "business.js" if library == "Shared Documents" else "Home.aspx",
+             "web_url": SITE + "/file", "size": 1, "last_modified": "2026-11-01T10:00:00Z"},
+        ]}
+
+    monkeypatch.setattr(auto, "SharePointReader", Reader)
+    monkeypatch.setattr(auto, "collect_sharepoint_files", collect)
+    result = auto.collect_copilot_files(enumerate_all=True)
+    assert calls == [("Shared Documents", ""), ("SitePages", "")]
+    assert {i["name"] for i in result["items"]} == {"business.js", "Home.aspx"}
+    assert len(result["excluded_libraries"]) == 4
+    assert result["items"][0]["library_title"] == "Documents"

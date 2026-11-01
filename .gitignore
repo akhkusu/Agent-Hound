@@ -15,6 +15,9 @@ build/
 # Output
 agenthound_output.json
 *.json.bak
+.local/
+outputs/
+copilot_windows_inventory.json
 
 # Claude Code generated
 CLAUDE.md

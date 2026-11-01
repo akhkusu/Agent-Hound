@@ -11,7 +11,6 @@ Run these in the **Cypher** tab of BloodHound CE after ingesting Agent-Hound out
 | `Capability` | `name`, `cap_kind`, `command`, `transport`, `has_shell` |
 | `Asset` | `name`, `asset_kind`, `path`, `readable`, `writable` |
 | `Impact` | `name`, `impact_kind`, `reachable`, `description` |
-| `M365Principal` | `name`, `tenant_id`, `resource_id`, `principal_kind` |
 
 ## Edge Types
 
@@ -19,11 +18,8 @@ Run these in the **Cypher** tab of BloodHound CE after ingesting Agent-Hound out
 |------|-----------|---------|
 | `Influences` | Source → Agent | IPI vector |
 | `HasCapability` | Agent → Capability | Tool is enabled |
-| `CanAccess` | Capability → Asset | Tool can reach this file |
+| `CanAccess` | Capability → Asset | Scope-limited access; inspect `access_scope`, confidence and evidence |
 | `Triggers` | Capability → Impact | Tool produces this consequence |
-| `MemberOf` | M365Principal → M365Principal | Observed group membership |
-| `CanRead` / `CanWrite` / `Owns` | M365Principal → Source + Asset | Observed SharePoint ACL grant |
-| `RunsAs` | Agent → M365Principal | Observed cloud account binding |
 
 ---
 
@@ -82,30 +78,45 @@ ORDER BY path_count DESC
 
 # Microsoft 365 and SharePoint
 
-Find principals who can change a document explicitly referenced by a Copilot agent that has a candidate route to a restricted document. The capability and source edges carry confidence and evidence; the path does not prove exploitation.
+Copilot uses the existing Agent, Capability, Source and Asset kinds. ACL identities remain analysis inputs. These Cypher queries display the exported graph; they do not register standard BloodHound Pathfinding support.
+
+Display candidate document-content paths with individual document names:
 
 ```cypher
-MATCH p=(editor:M365Principal)-[:CanWrite]->(entry:Source)-[:Influences]->(agent:Agent)-[:HasCapability]->(cap:Capability)-[:CanAccess]->(target:Asset)
+MATCH p=(agent:Agent)-[:HasCapability]->(cap:Capability)-[access:CanAccess]->(document:Asset)
+WHERE agent.platform = 'Microsoft 365 Copilot'
+  AND access.access_scope = 'document_content'
+RETURN p
+```
+
+Show names, confidence and whether retrieval was observed:
+
+```cypher
+MATCH (agent:Agent)-[:HasCapability]->(:Capability)-[access:CanAccess]->(document:Asset)
+WHERE document.asset_kind = 'SharePointDocument'
+RETURN agent.displayname, document.name, document.path,
+       access.access_scope, access.confidence, access.retrieval_verified,
+       access.retrieval_route, access.requires_explicit_document_context
+```
+
+Show complete candidate IPI paths through Copilot. The live collector marks these suspected and conditional on explicitly supplying the document:
+
+```cypher
+MATCH p=(source:Source)-[:Influences]->(agent:Agent)-[:HasCapability]->(:Capability)-[:CanAccess]->(document:Asset)
+WHERE agent.platform = 'Microsoft 365 Copilot'
+RETURN p
+```
+
+Show a referenced document influencing Copilot and its candidate route to a different restricted document:
+
+```cypher
+MATCH p=(entry:Source)-[:Influences]->(agent:Agent)-[:HasCapability]->(:Capability)-[access:CanAccess]->(target:Asset)
 WHERE entry.asset_kind = 'SharePointDocument'
   AND target.asset_kind = 'SharePointDocument'
   AND target.classification <> 'unclassified'
   AND entry <> target
+  AND access.access_scope = 'document_content'
 RETURN p
 ```
 
-`editor` can be a group. Show its observed members separately:
-
-```cypher
-MATCH p=(member:M365Principal)-[:MemberOf*1..8]->(group:M365Principal)-[:CanWrite]->(document:Source)
-WHERE document.asset_kind = 'SharePointDocument'
-RETURN p
-```
-
-Find SharePoint inventory that has no explicit Copilot source-reference edge:
-
-```cypher
-MATCH (document:Source)
-WHERE document.asset_kind = 'SharePointDocument'
-  AND NOT (document)-[:Influences]->(:Agent)
-RETURN document
-```
+Use `access.retrieval_verified = true` when filtering for observed retrieval. Even then, `explicit_document_context` requires supplying that particular document; it does not establish autonomous browsing.

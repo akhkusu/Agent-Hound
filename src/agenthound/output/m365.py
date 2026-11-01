@@ -1,4 +1,4 @@
-"""Export observed ACLs and evidence-scoped Copilot paths to OpenGraph."""
+"""Use ACL evidence to export Copilot paths with the existing graph vocabulary."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
                     "tenant_id": tenant,
                     "resource_id": identity,
                     "observed_at": snapshot.observed_at,
+                    "evidence_source": snapshot.evidence_source,
                     **props,
                 },
             }
@@ -61,23 +62,12 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
             }
         )
 
-    principal_ids = {
-        p.id: node(
-            "principal",
-            p.id,
-            ["M365Principal"],
-            name=p.name.upper(),
-            displayname=p.name,
-            principal_kind=p.kind,
-        )
-        for p in snapshot.principals
-    }
     document_ids = {
         d.id: node(
             "document",
             d.id,
             ["Source", "Asset"],
-            name=d.name.upper(),
+            name=d.name,
             displayname=d.name,
             source_kind="DocFile",
             asset_kind="SharePointDocument",
@@ -88,32 +78,6 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
         )
         for d in snapshot.documents
     }
-    for membership in snapshot.memberships:
-        edge(
-            principal_ids[membership.member_id],
-            principal_ids[membership.group_id],
-            "MemberOf",
-            membership.evidence,
-            observed_at=membership.observed_at or snapshot.observed_at,
-        )
-    for doc in snapshot.documents:
-        for grant in doc.grants:
-            roles = set(grant.roles)
-            for kind in (
-                ["CanRead"]
-                + (["CanWrite"] if roles & {"write", "owner"} else [])
-                + (["Owns"] if "owner" in roles else [])
-            ):
-                edge(
-                    principal_ids[grant.principal_id],
-                    document_ids[doc.id],
-                    kind,
-                    grant.evidence,
-                    inheritance=grant.inheritance,
-                    roles=sorted(roles),
-                    observed_at=grant.observed_at or snapshot.observed_at,
-                )
-
     for agent in snapshot.agents:
         agent_id = node(
             "agent",
@@ -123,11 +87,10 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
             displayname=agent.name,
             platform="Microsoft 365 Copilot",
             identity_evidence=agent.evidence,
+            effective_principal=agent.principal_id,
             observed_at=agent.observed_at or snapshot.observed_at,
         )
         agent_node = nodes[-1]
-        edge(agent_id, principal_ids[agent.principal_id], "RunsAs", agent.evidence,
-             observed_at=agent.observed_at or snapshot.observed_at)
         reachable = {agent.principal_id}
         while True:
             expanded = reachable | {
@@ -193,6 +156,12 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
                     access_basis="observed_retrieval" if observed else "acl",
                     retrieval_verified=observed,
                     retrieval_route=route,
+                    access_scope="document_content",
+                    acl_evidence=[g.evidence for d in snapshot.documents if d.id == doc_id
+                                  for g in d.grants if g.principal_id in reachable],
+                    acl_observed_at=[g.observed_at or snapshot.observed_at
+                                     for d in snapshot.documents if d.id == doc_id
+                                     for g in d.grants if g.principal_id in reachable],
                     observed_at=(references[doc_id].observed_at or snapshot.observed_at)
                     if observed else snapshot.observed_at,
                     **context_requirement,
@@ -213,10 +182,6 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
             )
     # Multiple independent grants may produce the same relation; retain their evidence.
     return {
-        "metadata": {
-            "source_kind": "AgentHound",
-            "evidence_source": snapshot.evidence_source,
-            "observed_at": snapshot.observed_at,
-        },
+        "metadata": {"source_kind": "AgentHound"},
         "graph": {"nodes": nodes, "edges": edges},
     }

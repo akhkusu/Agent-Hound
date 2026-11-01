@@ -22,8 +22,8 @@ def test_explicit_document_context_preserves_route_and_fact_times(snapshot):
     assert observed["properties"]["retrieval_route"] == "explicit_document_context"
     assert observed["properties"]["requires_explicit_document_context"] is True
     assert observed["properties"]["observed_at"] == "2026-11-01T08:31:00Z"
-    assert any(e["kind"] == "CanRead" and e["properties"]["observed_at"] == "2026-11-01T08:00:00Z" for e in graph["edges"])
-    assert next(e for e in graph["edges"] if e["kind"] == "RunsAs")["properties"]["observed_at"] == "2026-11-01T08:30:00Z"
+    assert observed["properties"]["acl_observed_at"] == ["2026-11-01T08:00:00Z"]
+    assert next(n for n in graph["nodes"] if n["kinds"] == ["Agent"])["properties"]["observed_at"] == "2026-11-01T08:30:00Z"
     assert next(n for n in graph["nodes"] if n["kinds"] == ["Capability"])["properties"]["displayname"] == "Document reading (observed)"
 
 
@@ -110,8 +110,8 @@ def graph(data):
 def test_acl_and_influence_have_separate_evidence(snapshot):
     g = graph(snapshot)
     kinds = [e["kind"] for e in g["edges"]]
-    assert kinds.count("CanWrite") == 1
-    assert kinds.count("CanRead") == 2
+    assert set(kinds) <= {"CanAccess", "HasCapability", "Influences"}
+    assert all(set(n["kinds"]) <= {"Agent", "Capability", "Source", "Asset"} for n in g["nodes"])
     assert kinds.count("CanAccess") == 2
     influence = next(e for e in g["edges"] if e["kind"] == "Influences")
     assert influence["properties"]["confidence"] == "suspected"
@@ -186,11 +186,8 @@ def test_group_cycles_terminate_and_unknown_inheritance_stays_unknown(snapshot):
     ]
     g = graph(snapshot)
     assert any(e["kind"] == "CanAccess" for e in g["edges"])
-    assert all(
-        e["properties"]["inheritance"] == "unknown"
-        for e in g["edges"]
-        if e["kind"] == "CanRead"
-    )
+    assert all(e["properties"]["acl_evidence"] == ["ACL export"]
+               for e in g["edges"] if e["kind"] == "CanAccess")
 
 
 @pytest.mark.parametrize(

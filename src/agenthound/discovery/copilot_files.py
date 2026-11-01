@@ -17,6 +17,7 @@ from agenthound.discovery.sharepoint_files import (
     collect_sharepoint_files,
     discover_sharepoint_resource,
 )
+from agenthound.discovery.sharepoint_scope import library_exclusion_reason
 
 
 def _sites(reader: SharePointReader, origin: str, max_pages: int) -> set[str]:
@@ -97,6 +98,7 @@ def collect_copilot_files(
             errors.append({"stage": "site_discovery", "site": origin, "error": str(exc)})
     items: list[dict[str, Any]] = []
     libraries: list[dict[str, Any]] = []
+    excluded_libraries: list[dict[str, str]] = []
     file_count = 0
     folder_count = 0
     visited: set[tuple[str, str, str]] = set()
@@ -111,7 +113,7 @@ def collect_copilot_files(
             token, _ = session(site)
             reader = SharePointReader(token, site_origin, encoded_site_path + "/_api/")
             url = canonical + "/_api/web/lists?" + urlencode({
-                "$filter": "BaseType eq 1", "$select": "Id,Title,ItemCount,RootFolder/ServerRelativeUrl",
+                "$filter": "BaseType eq 1", "$select": "Id,Title,Hidden,BaseTemplate,ItemCount,RootFolder/ServerRelativeUrl",
                 "$expand": "RootFolder", "$top": 5000})
             response = reader.get(url)
             values = response.get("value")
@@ -126,7 +128,12 @@ def collect_copilot_files(
                 if not isinstance(root, str) or not root.startswith(prefix):
                     raise M365FilesError("SharePoint returned a library outside the requested site")
                 library_path = root[len(prefix):]
+                reason = library_exclusion_reason(library_path, hidden=library.get("Hidden") is True)
+                if reason:
+                    excluded_libraries.append({"site_url": canonical, "library": library_path, "reason": reason})
+                    continue
                 libraries.append({"site_url": canonical, "library": library_path,
+                                  "title": library.get("Title", library_path),
                                   "reported_item_count": library.get("ItemCount"),
                                   "count_meaning": "Library-reported items, including folders; not verified readable documents."})
                 queue = [""]
@@ -157,11 +164,14 @@ def collect_copilot_files(
                     folder_count += 1
                     for item in listing["items"]:
                         if item["kind"] == "folder":
+                            if not relative and item["name"].casefold() == "forms":
+                                continue
                             queue.append((relative + "/" if relative else "") + item["name"])
                         else:
                             file_count += 1
                             if len(items) < display_limit:
-                                items.append({**item, "site_url": canonical, "library": library_path})
+                                items.append({**item, "site_url": canonical, "library": library_path,
+                                              "library_title": library.get("Title", library_path)})
                             if not enumerate_all and file_count >= display_limit:
                                 stopped_early = True
                                 break
@@ -176,12 +186,13 @@ def collect_copilot_files(
             "total_files_in_discovered_libraries": file_count if not errors and not stopped_early else None,
             "content_access_verified_count": None,
             "site_count": len(sites), "enumerated_folder_count": folder_count,
-            "libraries": libraries, "errors": errors,
+            "libraries": libraries, "excluded_libraries": excluded_libraries, "errors": errors,
             "enumeration_complete": not errors and not stopped_early,
             "stopped_early": stopped_early, "enumerate_all": enumerate_all,
             "site_discovery_complete": bool(site_url),
             "complete": bool(site_url) and not errors and not stopped_early,
             "limitations": ["Only the first display_limit file metadata records are retained.",
+                            "Hidden libraries, system libraries and root Forms folders are excluded from document attack paths.",
                             "Default traversal stops after the display limit or a 45-second budget; use --enumerate-all to count discovered locations fully.",
                             "Site search can omit unindexed or search-excluded sites; tenant-wide coverage is not established.",
                             "Library ItemCount is not a count of readable documents and can include folders.",

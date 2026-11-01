@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import click
 from rich.console import Console
@@ -64,19 +65,89 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
 @click.option("--verbose", "-v", is_flag=True)
 @click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
 @click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
+@click.option("--copilot/--no-copilot", default=True, show_default=True,
+              help="Include local Windows Copilot observations when LocalAppData is available.")
+@click.option("--local-app-data", type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="Copilot LocalAppData root, including an authorized offline copy.")
+@click.option("--include-registry", is_flag=True, help="Include current-user Copilot cached registry flags.")
+@click.option("--m365", is_flag=True, help="Also collect live SharePoint metadata using the existing Copilot WAM account.")
+@click.option("--m365-snapshot", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Merge observed M365 permissions and document references.")
+@click.option("--site-url", help="Limit live M365 discovery to this SharePoint site.")
+@click.option("--copilot-client-id", help="Existing configured WAM client ID, if selection is ambiguous.")
+@click.option("--limit", type=click.IntRange(1, 100000), default=20, show_default=True,
+              help="Maximum live SharePoint file metadata records retained.")
+@click.option("--enumerate-all", is_flag=True,
+              help="Finish recursive SharePoint enumeration; --limit still bounds retained document nodes.")
 def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pid: int | None,
-             process_identity: bool) -> None:
-    """Discover configs; merge Claude user/shared/local settings for this workspace."""
+             process_identity: bool, copilot: bool, local_app_data: Path | None,
+             include_registry: bool, m365: bool, m365_snapshot: Path | None,
+             site_url: str | None, copilot_client_id: str | None, limit: int,
+             enumerate_all: bool) -> None:
+    """Discover local agents and export one graph with an Attack Paths preview."""
+    import os
+
+    from pydantic import ValidationError
+
+    from agenthound.discovery.copilot_windows import (
+        copilot_inventory_graph,
+        inventory_copilot_windows,
+    )
+    from agenthound.discovery.m365_files import M365FilesError
+    from agenthound.discovery.m365_snapshot import M365Snapshot
+    from agenthound.output.m365 import build_m365_graph
+    from agenthound.output.unified import build_metadata_graph
+
+    if not copilot and (local_app_data is not None or include_registry):
+        raise click.ClickException("--local-app-data and --include-registry require --copilot")
+    if not m365 and (site_url is not None or copilot_client_id is not None or limit != 20 or enumerate_all):
+        raise click.ClickException("--site-url, --copilot-client-id, --limit and --enumerate-all require --m365")
+    if m365_snapshot is not None and m365_snapshot.resolve() == output.resolve():
+        raise click.ClickException("Snapshot and graph output paths must differ")
+    extra_graphs = []
+    try:
+        if copilot and (local_app_data is not None or os.environ.get("LOCALAPPDATA")):
+            inventory = inventory_copilot_windows(local_app_data, include_registry=include_registry)
+            _validate_inventory_destinations(inventory, [output])
+            extra_graphs.append(copilot_inventory_graph(inventory))
+        elif include_registry:
+            raise ValueError("Copilot inventory requires --local-app-data or LOCALAPPDATA")
+        if m365_snapshot is not None:
+            snapshot = M365Snapshot.model_validate_json(m365_snapshot.read_text(encoding="utf-8-sig"))
+            extra_graphs.append(build_m365_graph(snapshot))
+        if m365:
+            from agenthound.discovery.copilot_files import collect_copilot_files
+
+            listing = collect_copilot_files(site_url=site_url, client_id=copilot_client_id,
+                                            display_limit=limit, enumerate_all=enumerate_all)
+            extra_graphs.append(build_metadata_graph(listing))
+            click.echo(f"SharePoint: {len(listing['items'])} file metadata records retained; content access unverified.")
+            click.echo(f"SharePoint enumeration complete: {listing.get('enumeration_complete', False)}; tenant-wide coverage unverified.")
+            if listing.get("errors"):
+                click.echo(f"SharePoint collection errors: {len(listing['errors'])}; graph coverage is partial.")
+    except ValidationError as exc:
+        details = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors(include_input=False))
+        raise click.ClickException(f"Invalid M365 observation: {details}") from exc
+    except (M365FilesError, ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
     config_paths = discover_config_files(workspace)
-    if not config_paths:
-        console.print("[yellow]No agent config files found.[/yellow]")
-        return
     if verbose:
         console.print(f"[blue]Found {len(config_paths)} config file(s)[/blue]")
         for p in config_paths:
             console.print(f"  {p}")
     _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=True,
-              claude_pid=claude_pid, process_identity=process_identity)
+              claude_pid=claude_pid, process_identity=process_identity, extra_graphs=extra_graphs)
+
+
+def _validate_inventory_destinations(inventory: dict[str, Any], destinations: list[Path]) -> None:
+    roots = [item["data_root"] for item in inventory["observations"]]
+    roots.extend(store["path"] for store in (
+        *inventory["shared_authentication_store_presence"].values(),
+        *inventory["mcp_storage_presence"],
+    ))
+    for root in roots:
+        if any(destination.resolve().is_relative_to(Path(root).resolve()) for destination in destinations):
+            raise ValueError("Output must be outside application, authentication and MCP data roots")
 
 
 @cli.command("copilot-windows")
@@ -101,19 +172,7 @@ def copilot_windows(local_app_data: Path | None, output: Path, graph_output: Pat
         if graph_output is not None and graph_output.resolve() == output.resolve():
             raise ValueError("Inventory and graph output paths must differ")
         inventory = inventory_copilot_windows(local_app_data, include_registry=include_registry)
-        for item in inventory["observations"]:
-            root = Path(item["data_root"]).resolve()
-            for destination in [output, graph_output]:
-                if destination is not None and destination.resolve().is_relative_to(root):
-                    raise ValueError("Output must be outside the application data roots")
-        for store in (
-            *inventory["shared_authentication_store_presence"].values(),
-            *inventory["mcp_storage_presence"],
-        ):
-            root = Path(store["path"]).resolve()
-            for destination in [output, graph_output]:
-                if destination is not None and destination.resolve().is_relative_to(root):
-                    raise ValueError("Output must be outside authentication and MCP store roots")
+        _validate_inventory_destinations(inventory, [p for p in (output, graph_output) if p is not None])
         output.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if graph_output is not None:
             write_opengraph(copilot_inventory_graph(inventory), str(graph_output))
@@ -280,7 +339,10 @@ def m365_files(api: str | None, tenant_id: str | None, site_url: str | None, dri
 
 def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,
               merge_claude: bool = False, claude_pid: int | None = None,
-              process_identity: bool = False) -> None:
+              process_identity: bool = False, extra_graphs: list[dict[str, Any]] | None = None) -> None:
+    from agenthound.output.attack_paths import print_attack_paths
+    from agenthound.output.unified import merge_graphs
+
     if process_identity and claude_pid is not None:
         raise click.ClickException("Use either --process-identity or --claude-pid, not both")
     console.print(f"[bold blue]Agent-Hound v{__version__}[/bold blue]")
@@ -301,7 +363,7 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
                                      "runtime_computer_sid": identity.computer_sid})
             if agent == claude_agents[0] else agent for agent in cap_result.agents
         ]
-    internet = check_internet()
+    internet = check_internet() if cap_result.capabilities else False
 
     if verbose:
         _print_scope_summary(config_paths, workspace, scope, internet)
@@ -336,11 +398,14 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
     combined.edges.extend(impact_result.edges)
 
     og = build_opengraph(combined)
+    if extra_graphs:
+        og = merge_graphs(og, *extra_graphs)
     write_opengraph(og, str(output))
 
     console.print(f"[green]Output written to {output}[/green]")
-    console.print(f"  Nodes: {combined.total_nodes} | Edges: {combined.total_edges}")
+    console.print(f"  Nodes: {len(og['graph']['nodes'])} | Edges: {len(og['graph']['edges'])}")
     _print_findings(combined)
+    print_attack_paths(og, console)
 
 
 def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, internet: bool) -> None:
