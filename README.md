@@ -70,7 +70,7 @@ See [query.md](query.md) for example Cypher queries. For a graph preview without
 
 ## Connecting to Other Graphs
 
-Agent-Hound can connect its AI agent graph to data collected by other BloodHound tools. These bridge relationships reveal paths that cross security domains without making Agent-Hound responsible for collecting those external graphs.
+Agent-Hound can connect its AI agent graph to data collected by other BloodHound tools. 
 
 ### Active Directory
 
@@ -82,15 +82,11 @@ Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace path
 
 ### GitHub
 
-Connect local repositories and clean, committed agent sources to GitHub data collected by [GitHound](https://github.com/SpecterOps/GitHound). GitHound remains responsible for GitHub users, roles, repositories, and branches; Agent-Hound emits only the `AH_CloneOf` and `AH_SuppliesSource` bridge edges.
-
-The example below shows how several GitHub users—including an external developer—can write to `test-org/webapp`. Changes to `README.md`, `AGENTS.md`, or `skills/webapp/SKILL.md` on the tracked branch can then influence a coding agent running on a developer workstation. This exposes the cross-graph path from repository write access to local agent behavior.
+Connect Agent-Hound's OpenGraph data to a GitHound graph in BloodHound and trace paths between GitHub repositories and AI agent environments. The example below shows one use case: identifying GitHub users who can write to source files that influence an AI agent. See the [GitHound integration guide](docs/github-integration.md).
 
 <p align="center">
   <img src="img/github-githound-integration.png" alt="GitHound users and repository roles connected through Agent-Hound sources to a local coding agent" width="100%"/>
 </p>
-
-See the [GitHound integration guide](docs/github-integration.md).
 
 ---
 
