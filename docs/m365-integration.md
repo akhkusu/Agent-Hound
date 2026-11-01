@@ -4,7 +4,7 @@ Agent-Hound separates local application observations, cloud permissions, and evi
 
 ## Inventory Windows application data
 
-For development, install the working tree with `python -m pip install -e .`. Otherwise an earlier regular installation can run a stale copy from `site-packages` instead of the edited source.
+For live cloud file metadata, use [SharePoint file listing](m365-files.md). Its [authentication reference](copilot-sharepoint-auth.md) describes account selection and service-specific token requests. The inventory below observes local configuration and does not authenticate or retrieve cloud files.
 
 ```powershell
 agenthound copilot-windows --local-app-data "$env:USERPROFILE\AppData\Local" `
@@ -31,9 +31,9 @@ With `--include-registry`, the collector observes known keys under `HKCU\Softwar
 
 The collector never opens History, IndexedDB, Local Storage, Secure Preferences, credential bodies or conversation content. It does not export account identifiers, secrets, arbitrary preference strings, or tokens. It does not edit settings, execute binaries, or contact Microsoft services. The graph contains data-presence Agent observations and no inferred capability edges. Application-data leftovers may remain after uninstalling the application.
 
-For the Windows deployment observed on 2026-11-01, `copilotapp.exe` was installed under `Program Files (x86)/Microsoft/Copilot/Application`. Its shell displayed a work account and an M365 service. The legacy OfficeHub data root also existed. These observations are version-specific, not universal detection rules.
+Bundled implementation strings and cached feature flags do not establish that MCP tools are configured or enabled.
 
-Static investigation of that build also found MCP registry/projection and user server-management implementation references in `undocked_copilot/copilotapphost.exe`. Candidate names include `registry.json`, `runtime-projection.json`, `user-servers.json` and `secrets.json`. Their actual persistent location and activation remain unverified; these names are **not** discovery rules. The observed device had `isAutopilotNodeEnabled=0` and `codeTabGates_codeTabEnabled=0`. Do not infer enabled MCP tools from bundled implementation strings.
+`mcp_storage_presence` checks known MCP roots and their `accounts` directories for the Copilot, Copilot Dev and Copilot Internal channels, plus the legacy `Microsoft/Undocked/Autopilot/Mcp` root. The current layout is `Microsoft/<channel>/User Data/Autopilot/Mcp/accounts/<partition>/`, with `user-servers.json`, `registry.json`, `runtime-projection.json` and a `Credentials` root. Account partitions are derived rather than assumed to equal account IDs. These layouts can vary by version. Only path presence is exported: definition files, partition names and credential bodies are not read. Missing local storage does not establish that cloud MCP is absent, and present storage adds no capability or access edges.
 
 For authored M365 declarative agents, Microsoft's documented configuration is `appPackage/declarativeAgent.json`, including instructions and selected knowledge sources. This is distinct from the Windows host's telemetry `appsettings.json`. SharePoint scope in a manifest still depends on the signed-in user's access. See [Microsoft's knowledge-source configuration guide](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/build-declarative-agents-add-knowledge).
 

@@ -143,7 +143,7 @@ def test_explicit_token_is_tenant_and_audience_guarded_without_azure_cli(monkeyp
     with pytest.raises(files.M365FilesError, match="requested tenant") as error:
         files.acquire_graph_token(TENANT, "GRAPH_TOKEN")
     assert "signature-secret" not in str(error.value)
-    with pytest.raises(files.M365FilesError, match="Copilot authentication is not connected"):
+    with pytest.raises(files.M365FilesError, match="Choose --copilot-wam"):
         files.acquire_graph_token(TENANT)
 
 
@@ -199,5 +199,44 @@ def test_cli_missing_auth_fails_with_actionable_error_and_no_false_output(tmp_pa
     output = tmp_path / "files.json"
     result = CliRunner().invoke(cli, ["m365-files", "--tenant-id", TENANT, "--drive-id", "drive-1", "-o", str(output)])
     assert result.exit_code != 0
-    assert "Copilot authentication is not connected" in result.output
+    assert "Choose --copilot-wam" in result.output
     assert not output.exists()
+
+
+def test_cli_copilot_wam_passes_in_memory_token_to_the_get_collector(monkeypatch, tmp_path):
+    from agenthound.discovery import copilot_wam
+
+    tenants = []
+
+    def authenticate(tenant):
+        tenants.append(tenant)
+        return token()
+
+    monkeypatch.setattr(copilot_wam, "acquire_copilot_graph_token", authenticate)
+    urls = setup_reader(monkeypatch, [folder(), {"value": [child()]}])
+    output = tmp_path / "files.json"
+    result = CliRunner().invoke(cli, ["m365-files", "--copilot-wam", "--tenant-id", TENANT,
+                                     "--drive-id", "drive-1", "--json", "-o", str(output)])
+    assert result.exit_code == 0, result.output
+    assert tenants == [TENANT]
+    assert len(urls) == 2
+    assert json.loads(output.read_text())["complete"] is True
+    assert "signature-secret" not in result.output + output.read_text()
+
+
+def test_cli_copilot_denial_preserves_existing_output_and_never_contacts_graph(monkeypatch, tmp_path):
+    from agenthound.discovery import copilot_wam
+
+    def deny(tenant):
+        raise files.M365FilesError("Copilot WAM silent authentication was not granted (AADSTS65002)")
+
+    monkeypatch.setattr(copilot_wam, "acquire_copilot_graph_token", deny)
+    urls = setup_reader(monkeypatch, [])
+    output = tmp_path / "files.json"
+    output.write_text("existing-observation", encoding="utf-8")
+    result = CliRunner().invoke(cli, ["m365-files", "--copilot-wam", "--tenant-id", TENANT,
+                                     "--drive-id", "drive-1", "-o", str(output)])
+    assert result.exit_code != 0
+    assert "AADSTS65002" in result.output
+    assert output.read_text() == "existing-observation"
+    assert urls == []

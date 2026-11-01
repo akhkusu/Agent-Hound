@@ -1,55 +1,87 @@
-# Live SharePoint file listing
+# SharePoint file listing
 
-`m365-files` performs read-only Microsoft Graph requests and prints the immediate children of a SharePoint document-library folder. It is separate from `copilot-windows`, which inventories the Windows host's local settings.
+`agenthound m365-files` lists file metadata using the current Windows user's Copilot account. It discovers SharePoint locations and displays up to 20 files by default. It does not download document contents or collect complete ACLs.
 
-The Graph HTTP collector is implemented, but **a Copilot authentication adapter is not connected yet**. The command does not inspect OneAuth, decrypt browser cookies, use Azure CLI, or initiate login/consent. Without an explicit provider it fails with that limitation rather than writing an empty success result.
+## Requirements
 
-## Use an explicitly supplied existing Graph token
-
-An authorized authentication provider can put its existing Graph token in an environment variable in the current process. Never paste a token into the command line, this repository, a chat, or a log. The CLI takes the variable's **name**, not its value:
+The default mode requires Windows, an existing organizational Copilot sign-in, and Agent-Hound's Windows authentication dependencies:
 
 ```powershell
-agenthound m365-files `
-  --tenant-id TENANT_GUID `
+python -m pip install -e ".[windows-auth]"
+```
+
+Authentication uses the public Windows Web Account Manager (WAM) API and the account references stored by Copilot. The client must already be authorized for the target service. Agent-Hound does not register an application or initiate interactive login or consent. No external authentication CLI is required.
+
+## Discover files
+
+```powershell
+agenthound m365-files
+agenthound m365-files --json -o files.json
+```
+
+The command resolves the tenant and a SharePoint host candidate from local account metadata, verifies the host's tenant, discovers sites through SharePoint search, and walks their document libraries and folders. Default traversal stops after 20 file records or its 45-second traversal budget. Individual network and authentication calls have separate timeouts.
+
+To finish traversal of discovered locations while retaining at most 20 records:
+
+```powershell
+agenthound m365-files --enumerate-all --limit 20 -o files.json
+```
+
+`--enumerate-all` can take longer on large sites. Search can omit unindexed or search-excluded sites, so finishing this traversal does not establish tenant-wide coverage. Raw library listings can include templates and SharePoint support pages such as `Forms/*.aspx`.
+
+## Select a location
+
+Use `--site-url` when local metadata does not reveal a verifiable SharePoint host, or to restrict discovery to one site:
+
+```powershell
+agenthound m365-files --site-url https://contoso.sharepoint.com/sites/Research
+```
+
+To list the immediate children of one folder:
+
+```powershell
+agenthound m365-files --api sharepoint `
   --site-url https://contoso.sharepoint.com/sites/Research `
-  --folder Project_ORION `
-  --token-env AGENTHOUND_GRAPH_TOKEN `
-  -o orion_files.json
+  --library "Shared Documents" --folder Project_ORION
 ```
 
-`Project_ORION` is relative to the site's **default document library root**. Do not prefix it with `Shared Documents`. The command is not recursive and does not download document contents. Use `--json` for JSON on stdout; `-o` optionally saves the same metadata. The terminal table shows name, kind, bytes, modified time, and web URL. JSON also includes stable item, parent and drive IDs.
+`--library` is the library's decoded URL path, which defaults to `Shared Documents`. `--folder` is relative to that library root. `--tenant-id` can require a specific tenant; it must match the configured account.
 
-With a known Graph drive ID, skip site resolution:
+When the configured account has multiple client mappings, specify `--copilot-client-id` using the ID for the installed Copilot configuration. The selected ID must exist in that account's mapping. Account and client IDs are not selected by display name or list order.
+
+## Counts and completeness
+
+| Field | Meaning |
+|---|---|
+| `displayed_file_count` / `displayed_item_count` | Records retained in the output, bounded by `--limit`; explicit-folder output can include folders. |
+| `enumerated_file_count` | File metadata records counted before traversal stopped. This does not verify content access. |
+| `total_files_in_discovered_libraries` | Total counted in discovered libraries after traversal finishes without errors or early stopping; otherwise `null`. |
+| `libraries[].reported_item_count` | SharePoint's library-reported item count. It can include folders and is not a caller-specific count of readable documents. |
+| `content_access_verified_count` | `null`: document bodies are not requested. |
+| `enumeration_complete` | The attempted traversal finished without errors or early stopping. |
+| `site_discovery_complete` | False for search-based discovery. An explicitly selected site bounds the requested site scope. |
+| `errors` | Locations or collection stages that could not be enumerated. |
+
+For an explicit folder, `complete` describes collection before the output limit is applied; `items_truncated` identifies a shortened preview. In automatic discovery, `complete` also requires an explicitly bounded site scope. A partial listing must not be interpreted as an empty site or a complete inventory.
+
+## Microsoft Graph mode
+
+An explicitly supplied Graph token or drive ID selects the Graph backend. This mode lists one folder's immediate children:
 
 ```powershell
-agenthound m365-files --tenant-id TENANT_GUID --drive-id DRIVE_ID `
-  --folder Project_ORION --token-env AGENTHOUND_GRAPH_TOKEN --json
+agenthound m365-files --api graph --tenant-id TENANT_GUID `
+  --site-url https://contoso.sharepoint.com/sites/Research `
+  --folder Project_ORION --token-env AGENTHOUND_GRAPH_TOKEN
 ```
 
-Microsoft documents `Sites.Read.All` as the least delegated permission for [resolving a site by path](https://learn.microsoft.com/en-us/graph/api/site-getbypath?view=graph-rest-1.0). The [drive children API](https://learn.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0) and [drive metadata API](https://learn.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0) list `Files.Read` as their least delegated permission. Knowing a drive ID can therefore avoid the broader site-resolution permission. The caller still needs access to the target resources; having a permission scope alone does not grant access to another user's files.
+`--token-env` takes the environment variable's name, not the token value. It cannot be combined with `--copilot-wam`. `--drive-id` skips site resolution. Graph and SharePoint tokens target different services and are not interchangeable.
 
-This explicit token path is an integration interface and testable HTTP path. It does **not** demonstrate that Copilot's own authentication or capabilities were used. Do not report the Copilot integration complete until that adapter has been connected and live retrieval verified.
+Microsoft documents `Sites.Read.All` for [site resolution by path](https://learn.microsoft.com/en-us/graph/api/site-getbypath?view=graph-rest-1.0) and `Files.Read` as the least delegated permission for [drive children](https://learn.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0). User access to the target resources is also required.
 
-## Authentication adapter interface
+## Failures and limits
 
-The Python collector accepts a `token_provider` callback separately from its HTTP implementation:
+Authentication failures stop before an authenticated listing request. Automatic discovery records collection failures in `errors`; it does not convert them into successful empty collections. A denied or hidden resource does not prove that it is absent.
 
-```python
-collect_m365_files(
-    tenant_id=tenant_id,
-    site_url=site_url,
-    folder="Project_ORION",
-    token_provider=existing_authorized_auth_provider,
-)
-```
+Requests use GET only, reject redirects, and limit each response to 4 MiB. Collection is bounded to 100 pages and 10,000 items per folder by default; `--max-items` adjusts the item limit. Recursive traversal is bounded to 10,000 folders. Repeated pages, duplicate IDs, unexpected parents or exceeded limits fail the affected collection. A folder can change during pagination, so the result is not a transactional snapshot.
 
-The callback takes the requested tenant GUID and returns a token in memory. The collector uses readable JWT `tid` and `aud` metadata only to reject accidental wrong-tenant/wrong-resource routing. It does not verify the JWT signature itself; Microsoft Graph authenticates and authorizes the request. Opaque/encrypted tokens cannot pass this current routing guard and require a provider integration that can establish the equivalent target binding.
-
-## Failure behavior and collection limits
-
-- Missing authentication fails before any Graph GET and writes no listing.
-- HTTP 401 means Graph rejected authentication; 403 means access/scopes/consent need checking. HTTP 404 can mean an incorrect path or a resource hidden from the caller, not proven absence. HTTP 429 requests a later retry.
-- Every request is a GET to `https://graph.microsoft.com/v1.0/`. Redirects are rejected. Pagination must remain on the exact requested children endpoint; the bearer token is not sent to a download URL or a foreign next link.
-- Each response is bounded to 4 MiB with a 20-second request timeout. The default is at most 100 pages and 10,000 items (`--max-items` can adjust the item limit). Exceeding a limit, repeated pages, duplicate IDs or unexpected parents fails instead of presenting a partial result as complete.
-- Only selected metadata is returned. Download URLs, token bodies, raw API error bodies and authentication responses are not printed or saved. Normal SharePoint paths and Office `Doc.aspx` links with known document identity parameters are supported; authentication query parameters are rejected.
-- A folder can change between pages; the listing is not a transactional snapshot. It does not prove complete ACLs, document-content retrieval, or Copilot access.
+See [Copilot authentication and SharePoint collection](copilot-sharepoint-auth.md) for the implementation and trust checks.

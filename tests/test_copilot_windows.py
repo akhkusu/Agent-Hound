@@ -148,6 +148,42 @@ def test_shared_auth_store_is_protected_from_output(tmp_path):
     assert target.read_text() == "original"
 
 
+def test_mcp_store_presence_does_not_read_definitions_or_create_access_edges(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    root = tmp_path / "Microsoft/Copilot Dev/User Data/Autopilot/Mcp"
+    account = root / "accounts/synthetic-partition"
+    account.mkdir(parents=True)
+    (account / "user-servers.json").write_text('{"token":"sentinel-secret"}')
+    original_open = Path.open
+
+    def deny_store_reads(path, *args, **kwargs):
+        if path.is_relative_to(root):
+            raise AssertionError("MCP definitions and credentials must not be opened")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", deny_store_reads)
+    inventory = inventory_copilot_windows(tmp_path)
+    stores = {store["product"]: store for store in inventory["mcp_storage_presence"]}
+    assert stores["Copilot Dev"]["status"] == "present"
+    assert stores["Copilot Dev"]["accounts"]["status"] == "present"
+    assert stores["Copilot"]["status"] == "missing"
+    assert "sentinel-secret" not in json.dumps(inventory)
+    assert copilot_inventory_graph(inventory)["graph"]["nodes"] == []
+    assert copilot_inventory_graph(inventory)["graph"]["edges"] == []
+
+
+def test_cli_cannot_overwrite_legacy_mcp_store(tmp_path):
+    target = tmp_path / "Microsoft/Undocked/Autopilot/Mcp/accounts/partition/registry.json"
+    target.parent.mkdir(parents=True)
+    target.write_text("original")
+    result = CliRunner().invoke(cli, [
+        "copilot-windows", "--local-app-data", str(tmp_path), "-o", str(target),
+    ])
+    assert result.exit_code != 0
+    assert target.read_text() == "original"
+
+
 def test_file_read_settings_are_distinct_from_upload_and_runtime_access(tmp_path):
     profile(tmp_path, {
         "copilot": {"ocps_policies": {"isCopilotFileUploadEnabledWork": True}},

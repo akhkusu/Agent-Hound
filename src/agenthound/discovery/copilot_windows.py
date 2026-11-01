@@ -59,6 +59,14 @@ def _presence(path: Path) -> dict[str, str]:
     return {"path": str(path), "status": status}
 
 
+def copilot_mcp_roots(local_app_data: Path) -> tuple[tuple[str, Path], ...]:
+    """Storage layouts traced in Copilot 156; existence is observed separately."""
+    return tuple(
+        (product, local_app_data / "Microsoft" / product / "User Data/Autopilot/Mcp")
+        for product in ("Copilot", "Copilot Dev", "Copilot Internal")
+    ) + (("legacy-undocked", local_app_data / "Microsoft/Undocked/Autopilot/Mcp"),)
+
+
 def _settings(path: Path) -> tuple[dict[str, Any], str]:
     try:
         if not path.is_file():
@@ -149,6 +157,10 @@ def inventory_copilot_windows(
         "schema_version": 2,
         "observed_at": datetime.now(timezone.utc).isoformat(),
         "observations": observations,
+        "mcp_storage_presence": [
+            {"product": product, **_presence(root), "accounts": _presence(root / "accounts")}
+            for product, root in copilot_mcp_roots(local_app_data)
+        ],
         "shared_authentication_store_presence": {
             name: _presence(local_app_data / relative)
             for name, relative in (
@@ -174,6 +186,7 @@ def inventory_copilot_windows(
             "Authentication-store presence does not prove a valid token or app ownership.",
             "Registry observations describe the current Windows user, not an offline copy.",
             "Missing file-search/read settings do not imply allowed or denied defaults.",
+            "MCP storage paths follow the observed Copilot 156 layout; contents and activation are unverified.",
         ],
     }
     if include_registry:

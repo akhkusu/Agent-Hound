@@ -72,7 +72,7 @@ See [query.md](query.md) for example Cypher queries. For a graph preview without
 
 Use `agenthound copilot-windows` to inventory known Copilot/OfficeHub data locations and selected cached policy booleans. Use `agenthound m365-import` to turn an evidence-backed SharePoint metadata snapshot into an OpenGraph permission graph. These commands distinguish application presence, user ACLs and actual Copilot references. See [the M365 integration guide](docs/m365-integration.md) and [synthetic ORION example](examples/m365_snapshot.json).
 
-`agenthound m365-files` adds a read-only Graph folder listing with an explicit authentication provider. Copilot authentication is not connected yet; see [live file-listing setup and limitations](docs/m365-files.md).
+`agenthound m365-files` uses the existing Windows Copilot account to discover SharePoint locations and display up to 20 file metadata records by default, without a new app registration or external authentication CLI. Counts distinguish library-reported items, enumerated metadata and unverified content access. See [usage](docs/m365-files.md) and [how authentication, discovery and counts work](docs/copilot-sharepoint-auth.md).
 
 ## Connecting to an AD Graph
 

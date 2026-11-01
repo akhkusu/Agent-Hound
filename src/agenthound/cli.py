@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import zipfile
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -16,7 +16,10 @@ from agenthound.collectors.capabilities import collect_from_configs
 from agenthound.collectors.impact import check_internet, collect_impact
 from agenthound.collectors.sources import collect_sources
 from agenthound.discovery.config_parser import discover_config_files
-from agenthound.discovery.runtime_identity import RuntimeIdentityError, observe_claude_pid
+from agenthound.discovery.runtime_identity import (
+    RuntimeIdentityError,
+    observe_claude_pid,
+)
 from agenthound.models.edges import Edge
 from agenthound.output.ad_bridge import build_ad_bridge
 from agenthound.output.opengraph import build_opengraph, write_opengraph
@@ -89,7 +92,10 @@ def copilot_windows(local_app_data: Path | None, output: Path, graph_output: Pat
     """Inventory Copilot/OfficeHub locations and known cached policy booleans."""
     import json
 
-    from agenthound.discovery.copilot_windows import copilot_inventory_graph, inventory_copilot_windows
+    from agenthound.discovery.copilot_windows import (
+        copilot_inventory_graph,
+        inventory_copilot_windows,
+    )
 
     try:
         if graph_output is not None and graph_output.resolve() == output.resolve():
@@ -100,11 +106,14 @@ def copilot_windows(local_app_data: Path | None, output: Path, graph_output: Pat
             for destination in [output, graph_output]:
                 if destination is not None and destination.resolve().is_relative_to(root):
                     raise ValueError("Output must be outside the application data roots")
-        for store in inventory["shared_authentication_store_presence"].values():
+        for store in (
+            *inventory["shared_authentication_store_presence"].values(),
+            *inventory["mcp_storage_presence"],
+        ):
             root = Path(store["path"]).resolve()
             for destination in [output, graph_output]:
                 if destination is not None and destination.resolve().is_relative_to(root):
-                    raise ValueError("Output must be outside authentication store roots")
+                    raise ValueError("Output must be outside authentication and MCP store roots")
         output.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if graph_output is not None:
             write_opengraph(copilot_inventory_graph(inventory), str(graph_output))
@@ -124,7 +133,7 @@ def copilot_windows(local_app_data: Path | None, output: Path, graph_output: Pat
         for location, flags in locations:
             click.echo(f"    {location}: search={flags.get('is_file_search_allowed', 'unknown')}, "
                        f"read={flags.get('is_file_read_allowed', 'unknown')}")
-    click.echo("  SharePoint files/ACLs: not collected by this command; use m365-import with an observed snapshot")
+    click.echo("  SharePoint file metadata: use m365-files; observed ACLs: use m365-import with a snapshot")
     click.echo("Cached flags and authentication-store presence do not prove file access.")
 
 
@@ -170,28 +179,80 @@ def m365_import(snapshot: Path, output: Path) -> None:
 
 
 @cli.command("m365-files")
-@click.option("--tenant-id", required=True, help="Target Entra tenant GUID.")
+@click.option("--api", type=click.Choice(["auto", "graph", "sharepoint"]),
+              help="Defaults to recursive Copilot discovery without target arguments; explicit tokens/drive IDs use Graph.")
+@click.option("--tenant-id", help="Target Entra tenant GUID; defaults to the current Copilot account.")
 @click.option("--site-url", help="SharePoint site URL; uses its default document library.")
 @click.option("--drive-id", help="Known Graph drive ID; skips site resolution.")
 @click.option("--folder", default="", help="Folder relative to the library root, e.g. Project_ORION.")
+@click.option("--library", default="Shared Documents", show_default=True,
+              help="Library URL path for --api sharepoint; pass its decoded path.")
 @click.option("--token-env", help="Environment variable containing an existing Graph token; never pass its value here.")
+@click.option("--copilot-wam", is_flag=True, help="Silent Windows broker auth using the configured Copilot account.")
+@click.option("--copilot-client-id", help="Select a client GUID already present in the current Copilot account's WAM mapping; needed if ambiguous.")
 @click.option("--max-items", type=click.IntRange(1, 100000), default=10000, show_default=True)
+@click.option("--limit", type=click.IntRange(1, 100000), default=20, show_default=True,
+              help="Maximum displayed/saved item records; totals are reported separately.")
+@click.option("--enumerate-all", is_flag=True,
+              help="Finish recursive enumeration to count discovered locations; display remains limited.")
 @click.option("--output", "-o", type=click.Path(path_type=Path), help="Optional metadata JSON file.")
 @click.option("--json", "json_stdout", is_flag=True, help="Write metadata JSON to stdout instead of a table.")
-def m365_files(tenant_id: str, site_url: str | None, drive_id: str | None,
-               folder: str, token_env: str | None, max_items: int,
+def m365_files(api: str | None, tenant_id: str | None, site_url: str | None, drive_id: str | None,
+               folder: str, library: str, token_env: str | None, copilot_wam: bool,
+               copilot_client_id: str | None, max_items: int, limit: int, enumerate_all: bool,
                output: Path | None, json_stdout: bool) -> None:
-    """List live SharePoint folder items through read-only Microsoft Graph GETs."""
+    """List live folder items through Microsoft Graph or SharePoint REST GETs."""
     import json
+
     from rich.text import Text
 
     from agenthound.discovery.m365_files import M365FilesError, collect_m365_files
 
     try:
-        listing = collect_m365_files(
-            tenant_id=tenant_id, site_url=site_url, drive_id=drive_id,
-            folder=folder, token_env=token_env, max_items=max_items,
-        )
+        selected_api = api or ("graph" if token_env is not None or drive_id else
+                               "sharepoint" if site_url and folder else "auto")
+        if selected_api == "auto":
+            from agenthound.discovery.copilot_files import collect_copilot_files
+
+            if token_env is not None or drive_id or folder:
+                raise M365FilesError("Auto discovery uses Copilot WAM; use --api sharepoint or graph for an explicit folder/token")
+            listing = collect_copilot_files(tenant_id=tenant_id, site_url=site_url,
+                                            client_id=copilot_client_id, display_limit=limit,
+                                            max_items=max_items, enumerate_all=enumerate_all)
+        else:
+            if tenant_id is None:
+                from agenthound.discovery.copilot_wam import discover_copilot_context
+
+                tenant_id = discover_copilot_context()["tenant_id"]
+        if selected_api == "sharepoint":
+            from agenthound.discovery.sharepoint_files import collect_sharepoint_files
+
+            assert tenant_id is not None  # Resolved above for explicit backends.
+            if not site_url or drive_id:
+                raise M365FilesError("--api sharepoint requires --site-url and does not accept --drive-id")
+            listing = collect_sharepoint_files(
+                tenant_id=tenant_id, site_url=site_url, folder=folder, library=library,
+                token_env=token_env, copilot_wam=copilot_wam or token_env is None,
+                copilot_client_id=copilot_client_id, max_items=max_items,
+            )
+        elif selected_api == "graph":
+            assert tenant_id is not None  # Resolved above for explicit backends.
+            if library != "Shared Documents":
+                raise M365FilesError("--library is supported only with --api sharepoint")
+            listing = collect_m365_files(
+                tenant_id=tenant_id, site_url=site_url, drive_id=drive_id,
+                folder=folder, token_env=token_env, copilot_wam=copilot_wam,
+                copilot_client_id=copilot_client_id, max_items=max_items,
+            )
+        if selected_api != "auto":
+            listed_items = listing["items"]
+            listing["enumerated_item_count"] = len(listed_items)
+            listing["enumerated_file_count"] = sum(item["kind"] == "file" for item in listed_items)
+            listing["content_access_verified_count"] = None
+            listing["display_limit"] = limit
+            listing["items"] = listed_items[:limit]
+            listing["displayed_item_count"] = len(listing["items"])
+            listing["items_truncated"] = len(listed_items) > limit
         if output is not None:
             output.write_text(json.dumps(listing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     except (M365FilesError, OSError) as exc:
@@ -199,13 +260,19 @@ def m365_files(tenant_id: str, site_url: str | None, drive_id: str | None,
     if json_stdout:
         click.echo(json.dumps(listing, ensure_ascii=False, indent=2))
     else:
-        table = Table(title=f"SharePoint files ({len(listing['items'])})")
+        table = Table(title=f"SharePoint items (shown {len(listing['items'])}; enumerated file metadata {listing['enumerated_file_count']})")
         for title in ("Name", "Kind", "Bytes", "Modified", "URL"):
             table.add_column(title, overflow="fold")
         for item in listing["items"]:
             table.add_row(*(Text(str(item[key])) for key in
                             ("name", "kind", "size", "last_modified", "web_url")))
         console.print(table, markup=False)
+        if listing.get("mode") == "recursive_discovery":
+            total = listing["total_files_in_discovered_libraries"]
+            click.echo(f"Total files in discovered libraries: {total if total is not None else 'unknown (partial enumeration)'}. Tenant-wide coverage: unverified.")
+            if listing["errors"]:
+                click.echo(f"Collection errors: {len(listing['errors'])}; use --json or --output for details.")
+        click.echo("Document-content access count: unverified. Library-reported item counts can include folders.")
         click.echo("Live API listing; document contents, complete ACLs and Copilot retrieval were not collected.")
     if output is not None:
         click.echo(f"Metadata written to {output}", err=json_stdout)

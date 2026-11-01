@@ -1,7 +1,7 @@
 """Read live SharePoint folder metadata through Microsoft Graph.
 
 Authentication is supplied explicitly, independently of the HTTP collector.
-No browser/OneAuth cache is inspected and no Azure CLI session is used.
+An explicit Copilot WAM provider can read account metadata, never cache tokens.
 """
 
 from __future__ import annotations
@@ -123,8 +123,18 @@ def _check_token_route(token: str, tenant: str) -> None:
         raise M365FilesError("Token is not a readable JWT for the requested tenant and Microsoft Graph audience") from None
 
 
-def acquire_graph_token(tenant_id: str, token_env: str | None = None) -> str:
+def acquire_graph_token(tenant_id: str, token_env: str | None = None,
+                        copilot_wam: bool = False, copilot_client_id: str | None = None) -> str:
     tenant = validate_tenant(tenant_id)
+    if copilot_wam:
+        if token_env is not None:
+            raise M365FilesError("Use one authentication provider: --copilot-wam or --token-env")
+        from agenthound.discovery.copilot_wam import acquire_copilot_graph_token
+
+        return (acquire_copilot_graph_token(tenant, copilot_client_id)
+                if copilot_client_id is not None else acquire_copilot_graph_token(tenant))
+    if copilot_client_id is not None:
+        raise M365FilesError("--copilot-client-id requires --copilot-wam")
     if token_env is not None:
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", token_env):
             raise M365FilesError("--token-env must name an environment variable, not contain a token")
@@ -134,7 +144,7 @@ def acquire_graph_token(tenant_id: str, token_env: str | None = None) -> str:
         _check_token_route(token, tenant)
         return token
     raise M365FilesError(
-        "Copilot authentication is not connected to this command yet. "
+        "Choose --copilot-wam for opt-in silent Windows authentication. "
         "For an explicit existing Graph token, use --token-env VARIABLE_NAME; "
         "this does not reuse the Copilot login and does not invoke Azure CLI."
     )
@@ -195,6 +205,8 @@ def collect_m365_files(
     drive_id: str | None = None, token_env: str | None = None,
     max_items: int = 10000, max_pages: int = 100,
     token_provider: Callable[[str], str] | None = None,
+    copilot_wam: bool = False,
+    copilot_client_id: str | None = None,
 ) -> dict[str, Any]:
     """List a single folder's immediate children; never fetch document contents."""
     tenant = validate_tenant(tenant_id)
@@ -209,12 +221,12 @@ def collect_m365_files(
     if max_items < 1 or max_pages < 1:
         raise M365FilesError("Collection limits must be positive")
     if token_provider is not None:
-        if token_env is not None:
+        if token_env is not None or copilot_wam or copilot_client_id is not None:
             raise M365FilesError("Use one authentication provider")
         token = token_provider(tenant)
         _check_token_route(token, tenant)
     else:
-        token = acquire_graph_token(tenant, token_env)
+        token = acquire_graph_token(tenant, token_env, copilot_wam, copilot_client_id)
     client = GraphReader(token)
     observed_site: dict[str, str] | None = None
     if site is not None:
