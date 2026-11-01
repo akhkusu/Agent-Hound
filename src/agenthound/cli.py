@@ -19,6 +19,7 @@ from agenthound.discovery.config_parser import discover_config_files
 from agenthound.discovery.runtime_identity import RuntimeIdentityError, observe_claude_pid
 from agenthound.models.edges import Edge
 from agenthound.output.ad_bridge import build_ad_bridge
+from agenthound.output.github_bridge import build_github_bridge
 from agenthound.output.opengraph import build_opengraph, write_opengraph
 from agenthound.platforms import CUSTOM_TYPES
 
@@ -90,6 +91,37 @@ def ad_bridge(agent_graph: Path, ad_zip: Path, output: Path) -> None:
         raise click.ClickException(str(exc)) from exc
     write_opengraph(payload, str(output))
     click.echo(f"Output written to {output} ({len(payload['graph']['edges'])} verified AD link(s))")
+
+
+@cli.command("github-bridge")
+@click.option("--agent-graph", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option(
+    "--githound-graph",
+    type=click.Path(exists=True, path_type=Path),
+    multiple=True,
+    required=True,
+)
+@click.option("--output", "-o", type=click.Path(path_type=Path), required=True)
+def github_bridge(agent_graph: Path, githound_graph: tuple[Path, ...], output: Path) -> None:
+    """Connect local repositories and clean sources to existing GitHound nodes."""
+    import json
+
+    try:
+        agent_payload = json.loads(agent_graph.read_text(encoding="utf-8"))
+        github_payloads = [
+            json.loads(path.read_text(encoding="utf-8")) for path in githound_graph
+        ]
+        payload = build_github_bridge(agent_payload, github_payloads)
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    write_opengraph(payload, str(output))
+    edges = payload["graph"]["edges"]
+    clone_count = sum(edge["kind"] == "AH_CloneOf" for edge in edges)
+    source_count = sum(edge["kind"] == "AH_SuppliesSource" for edge in edges)
+    click.echo(
+        f"Output written to {output} "
+        f"({clone_count} repository link(s), {source_count} supplied source(s))"
+    )
 
 
 def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,

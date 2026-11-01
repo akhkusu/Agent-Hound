@@ -70,6 +70,10 @@ class Source(BaseModel):
     source_kind: SourceKind
     path: str
     is_external: bool = False
+    git_repository_asset_id: str = ""
+    git_relative_path: str = ""
+    git_committed: bool = False
+    git_clean: bool = False
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -77,16 +81,24 @@ class Source(BaseModel):
         return _hash_id("source", self.source_kind, self.path)
 
     def to_opengraph(self) -> dict[str, Any]:
+        properties: dict[str, Any] = {
+            "name": self.name.upper(),
+            "displayname": self.name,
+            "source_kind": self.source_kind,
+            "path": self.path,
+            "is_external": self.is_external,
+        }
+        if self.git_repository_asset_id:
+            properties.update(
+                git_repository_asset_id=self.git_repository_asset_id,
+                git_relative_path=self.git_relative_path,
+                git_committed=self.git_committed,
+                git_clean=self.git_clean,
+            )
         return {
             "id": self.objectid,
             "kinds": ["Source"],
-            "properties": {
-                "name": self.name.upper(),
-                "displayname": self.name,
-                "source_kind": self.source_kind,
-                "path": self.path,
-                "is_external": self.is_external,
-            },
+            "properties": properties,
         }
 
 
@@ -188,6 +200,9 @@ class Asset(BaseModel):
     path: str
     readable: bool = True
     writable: bool = False
+    git_remote_repository: str = ""
+    git_upstream_branch: str = ""
+    git_head_commit: str = ""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -195,17 +210,25 @@ class Asset(BaseModel):
         return _hash_id("asset", self.asset_kind, self.path)
 
     def to_opengraph(self) -> dict[str, Any]:
+        properties: dict[str, Any] = {
+            "name": self.name.upper(),
+            "displayname": self.name,
+            "asset_kind": self.asset_kind,
+            "path": self.path,
+            "readable": self.readable,
+            "writable": self.writable,
+        }
+        if self.git_head_commit:
+            properties["git_head_commit"] = self.git_head_commit
+        if self.git_remote_repository:
+            properties.update(
+                git_remote_repository=self.git_remote_repository,
+                git_upstream_branch=self.git_upstream_branch,
+            )
         return {
             "id": self.objectid,
             "kinds": ["Asset"],
-            "properties": {
-                "name": self.name.upper(),
-                "displayname": self.name,
-                "asset_kind": self.asset_kind,
-                "path": self.path,
-                "readable": self.readable,
-                "writable": self.writable,
-            },
+            "properties": properties,
         }
 
 
