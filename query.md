@@ -11,6 +11,7 @@ Run these in the **Cypher** tab of BloodHound CE after ingesting Agent-Hound out
 | `Capability` | `name`, `cap_kind`, `command`, `transport`, `has_shell` |
 | `Asset` | `name`, `asset_kind`, `path`, `readable`, `writable` |
 | `Impact` | `name`, `impact_kind`, `reachable`, `description` |
+| `M365Principal` | `name`, `tenant_id`, `resource_id`, `principal_kind` |
 
 ## Edge Types
 
@@ -20,6 +21,9 @@ Run these in the **Cypher** tab of BloodHound CE after ingesting Agent-Hound out
 | `HasCapability` | Agent → Capability | Tool is enabled |
 | `CanAccess` | Capability → Asset | Tool can reach this file |
 | `Triggers` | Capability → Impact | Tool produces this consequence |
+| `MemberOf` | M365Principal → M365Principal | Observed group membership |
+| `CanRead` / `CanWrite` / `Owns` | M365Principal → Source + Asset | Observed SharePoint ACL grant |
+| `RunsAs` | Agent → M365Principal | Observed cloud account binding |
 
 ---
 
@@ -74,4 +78,34 @@ RETURN a.name, c.name, i.name
 MATCH path = (c:Capability)-[:Triggers]->(i:Impact)
 RETURN i.impact_kind, count(path) AS path_count
 ORDER BY path_count DESC
+```
+
+# Microsoft 365 and SharePoint
+
+Find principals who can change a document explicitly referenced by a Copilot agent that has a candidate route to a restricted document. The capability and source edges carry confidence and evidence; the path does not prove exploitation.
+
+```cypher
+MATCH p=(editor:M365Principal)-[:CanWrite]->(entry:Source)-[:Influences]->(agent:Agent)-[:HasCapability]->(cap:Capability)-[:CanAccess]->(target:Asset)
+WHERE entry.asset_kind = 'SharePointDocument'
+  AND target.asset_kind = 'SharePointDocument'
+  AND target.classification <> 'unclassified'
+  AND entry <> target
+RETURN p
+```
+
+`editor` can be a group. Show its observed members separately:
+
+```cypher
+MATCH p=(member:M365Principal)-[:MemberOf*1..8]->(group:M365Principal)-[:CanWrite]->(document:Source)
+WHERE document.asset_kind = 'SharePointDocument'
+RETURN p
+```
+
+Find SharePoint inventory that has no explicit Copilot source-reference edge:
+
+```cypher
+MATCH (document:Source)
+WHERE document.asset_kind = 'SharePointDocument'
+  AND NOT (document)-[:Influences]->(:Agent)
+RETURN document
 ```

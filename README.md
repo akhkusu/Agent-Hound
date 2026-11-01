@@ -68,6 +68,12 @@ Open **BloodHound CE** (v8.0+), go to **File Ingest**, and upload the generated 
 
 See [query.md](query.md) for example Cypher queries. For a graph preview without a live scan, see the [sample output](examples/sample_output.json) and [demo graph](examples/demo.json).
 
+### Windows Copilot and Microsoft 365
+
+Use `agenthound copilot-windows` to inventory known Copilot/OfficeHub data locations and selected cached policy booleans. Use `agenthound m365-import` to turn an evidence-backed SharePoint metadata snapshot into an OpenGraph permission graph. These commands distinguish application presence, user ACLs and actual Copilot references. See [the M365 integration guide](docs/m365-integration.md) and [synthetic ORION example](examples/m365_snapshot.json).
+
+`agenthound m365-files` adds a read-only Graph folder listing with an explicit authentication provider. Copilot authentication is not connected yet; see [live file-listing setup and limitations](docs/m365-files.md).
+
 ## Connecting to an AD Graph
 
 Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace paths from AI agent environments to AD users, computers, and groups. See the [AD integration guide](docs/ad-integration.md).

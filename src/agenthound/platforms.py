@@ -10,4 +10,5 @@ CUSTOM_TYPES: dict[str, Any] = {
     "Capability": {"icon": {"name": "bolt",         "type": "font-awesome", "color": "#9b59b6"}},
     "Asset":      {"icon": {"name": "lock",         "type": "font-awesome", "color": "#e67e22"}},
     "Impact":     {"icon": {"name": "skull",        "type": "font-awesome", "color": "#c0392b"}},
+    "M365Principal": {"icon": {"name": "users", "type": "font-awesome", "color": "#3498db"}},
 }

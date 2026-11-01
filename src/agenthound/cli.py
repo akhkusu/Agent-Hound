@@ -76,6 +76,58 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pi
               claude_pid=claude_pid, process_identity=process_identity)
 
 
+@cli.command("copilot-windows")
+@click.option("--include-registry", is_flag=True,
+              help="Also inspect known live HKCU Copilot keys (not the offline copy).")
+@click.option("--local-app-data", type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="Windows LocalAppData root, or an authorized offline copy.")
+@click.option("--output", "-o", type=click.Path(path_type=Path),
+              default="copilot_windows_inventory.json", show_default=True)
+@click.option("--graph-output", type=click.Path(path_type=Path), help="Optional OpenGraph inventory output.")
+def copilot_windows(local_app_data: Path | None, output: Path, graph_output: Path | None,
+                    include_registry: bool) -> None:
+    """Inventory Copilot/OfficeHub locations and known cached policy booleans."""
+    import json
+
+    from agenthound.discovery.copilot_windows import copilot_inventory_graph, inventory_copilot_windows
+
+    try:
+        if graph_output is not None and graph_output.resolve() == output.resolve():
+            raise ValueError("Inventory and graph output paths must differ")
+        inventory = inventory_copilot_windows(local_app_data, include_registry=include_registry)
+        for item in inventory["observations"]:
+            root = Path(item["data_root"]).resolve()
+            for destination in [output, graph_output]:
+                if destination is not None and destination.resolve().is_relative_to(root):
+                    raise ValueError("Output must be outside the application data roots")
+        for store in inventory["shared_authentication_store_presence"].values():
+            root = Path(store["path"]).resolve()
+            for destination in [output, graph_output]:
+                if destination is not None and destination.resolve().is_relative_to(root):
+                    raise ValueError("Output must be outside authentication store roots")
+        output.write_text(json.dumps(inventory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if graph_output is not None:
+            write_opengraph(copilot_inventory_graph(inventory), str(graph_output))
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Inventory written to {output} ({len(inventory['observations'])} data root(s))")
+    click.echo("File access assessment:")
+    click.echo("  Local file search/read: unverified (no runtime retrieval tested)")
+    for item in inventory["observations"]:
+        if item["product"] != "copilot-windows":
+            continue
+        locations = [("Local State", item.get("local_file_permission_settings", {}))]
+        locations.extend(
+            (p["profile"] + "/Preferences", p["local_file_permission_settings"])
+            for p in item.get("profiles", [])
+        )
+        for location, flags in locations:
+            click.echo(f"    {location}: search={flags.get('is_file_search_allowed', 'unknown')}, "
+                       f"read={flags.get('is_file_read_allowed', 'unknown')}")
+    click.echo("  SharePoint files/ACLs: not collected by this command; use m365-import with an observed snapshot")
+    click.echo("Cached flags and authentication-store presence do not prove file access.")
+
+
 @cli.command("ad-bridge")
 @click.option("--agent-graph", type=click.Path(exists=True, path_type=Path), required=True)
 @click.option("--ad-zip", type=click.Path(exists=True, path_type=Path), required=True)
@@ -90,6 +142,73 @@ def ad_bridge(agent_graph: Path, ad_zip: Path, output: Path) -> None:
         raise click.ClickException(str(exc)) from exc
     write_opengraph(payload, str(output))
     click.echo(f"Output written to {output} ({len(payload['graph']['edges'])} verified AD link(s))")
+
+
+@cli.command("m365-import")
+@click.option("--snapshot", type=click.Path(exists=True, dir_okay=False, path_type=Path), required=True)
+@click.option("--output", "-o", type=click.Path(path_type=Path), required=True)
+def m365_import(snapshot: Path, output: Path) -> None:
+    """Import observed SharePoint ACLs and explicit Copilot references (no network)."""
+    from pydantic import ValidationError
+
+    from agenthound.discovery.m365_snapshot import M365Snapshot
+    from agenthound.output.m365 import build_m365_graph
+
+    try:
+        if snapshot.resolve() == output.resolve():
+            raise ValueError("Snapshot and graph output paths must differ")
+        data = M365Snapshot.model_validate_json(snapshot.read_text(encoding="utf-8-sig"))
+        graph = build_m365_graph(data)
+        write_opengraph(graph, str(output))
+    except ValidationError as exc:
+        details = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors(include_input=False))
+        raise click.ClickException(f"Invalid M365 snapshot: {details}") from exc
+    except (ValueError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"Output written to {output} ({len(graph['graph']['nodes'])} nodes, {len(graph['graph']['edges'])} edges)")
+    click.echo("ACL reachability is separate from Copilot retrieval; inspect confidence and evidence.")
+
+
+@cli.command("m365-files")
+@click.option("--tenant-id", required=True, help="Target Entra tenant GUID.")
+@click.option("--site-url", help="SharePoint site URL; uses its default document library.")
+@click.option("--drive-id", help="Known Graph drive ID; skips site resolution.")
+@click.option("--folder", default="", help="Folder relative to the library root, e.g. Project_ORION.")
+@click.option("--token-env", help="Environment variable containing an existing Graph token; never pass its value here.")
+@click.option("--max-items", type=click.IntRange(1, 100000), default=10000, show_default=True)
+@click.option("--output", "-o", type=click.Path(path_type=Path), help="Optional metadata JSON file.")
+@click.option("--json", "json_stdout", is_flag=True, help="Write metadata JSON to stdout instead of a table.")
+def m365_files(tenant_id: str, site_url: str | None, drive_id: str | None,
+               folder: str, token_env: str | None, max_items: int,
+               output: Path | None, json_stdout: bool) -> None:
+    """List live SharePoint folder items through read-only Microsoft Graph GETs."""
+    import json
+    from rich.text import Text
+
+    from agenthound.discovery.m365_files import M365FilesError, collect_m365_files
+
+    try:
+        listing = collect_m365_files(
+            tenant_id=tenant_id, site_url=site_url, drive_id=drive_id,
+            folder=folder, token_env=token_env, max_items=max_items,
+        )
+        if output is not None:
+            output.write_text(json.dumps(listing, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    except (M365FilesError, OSError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    if json_stdout:
+        click.echo(json.dumps(listing, ensure_ascii=False, indent=2))
+    else:
+        table = Table(title=f"SharePoint files ({len(listing['items'])})")
+        for title in ("Name", "Kind", "Bytes", "Modified", "URL"):
+            table.add_column(title, overflow="fold")
+        for item in listing["items"]:
+            table.add_row(*(Text(str(item[key])) for key in
+                            ("name", "kind", "size", "last_modified", "web_url")))
+        console.print(table, markup=False)
+        click.echo("Live API listing; document contents, complete ACLs and Copilot retrieval were not collected.")
+    if output is not None:
+        click.echo(f"Metadata written to {output}", err=json_stdout)
 
 
 def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,
