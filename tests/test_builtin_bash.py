@@ -71,8 +71,8 @@ def test_discover_merges_bash_allow_without_changing_read_only_demo(tmp_path, mo
     assert any(node["properties"].get("impact_kind") == "SystemTakeover" for node in graph["nodes"])
     assert all(edge["properties"].get("confidence") == "suspected" for edge in graph["edges"] if edge["kind"] == "Triggers")
 
-    readme = next(node for node in graph["nodes"] if node["properties"]["name"] == "README.MD")
+    instructions = next(node for node in graph["nodes"] if node["properties"]["name"] == "CLAUDE.MD")
     agent = next(node for node in graph["nodes"] if node["properties"]["name"] == "CLAUDE-CODE")
     bash = next(node for node in graph["nodes"] if node["properties"]["name"] == "BASH")
-    assert any(edge["kind"] == "Influences" and edge["start"]["value"] == readme["id"] and edge["end"]["value"] == agent["id"] for edge in graph["edges"])
+    assert any(edge["kind"] == "Influences" and edge["start"]["value"] == instructions["id"] and edge["end"]["value"] == agent["id"] for edge in graph["edges"])
     assert any(edge["kind"] == "HasCapability" and edge["start"]["value"] == agent["id"] and edge["end"]["value"] == bash["id"] for edge in graph["edges"])

@@ -19,9 +19,29 @@ def test_find_doc_files(tmp_path):
     (tmp_path / "page.html").write_text("<html/>")
     results = find_source_files(tmp_path)
     names = {Path(p).name for p, _ in results}
-    assert "README.md" in names
+    assert "README.md" not in names
     assert "notes.txt" in names
     assert "page.html" in names
+
+
+def test_find_structured_agent_sources(tmp_path):
+    files = {
+        ".agents/skills/review/SKILL.md": "Skill",
+        ".claude/rules/python.md": "AgentInstruction",
+        ".github/instructions/tests.instructions.md": "AgentInstruction",
+        ".cursor/rules/security.mdc": "AgentInstruction",
+        ".github/prompts/review.prompt.md": "PromptFile",
+        ".claude/commands/release.md": "PromptFile",
+        ".github/agents/reviewer.md": "AgentDefinition",
+        ".claude/agents/auditor.md": "AgentDefinition",
+    }
+    for relative in files:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("instructions")
+
+    results = {str(Path(path).relative_to(tmp_path)): kind for path, kind in find_source_files(tmp_path)}
+    assert results == files
 
 
 def test_source_kind_agent_instruction(tmp_path):
@@ -32,7 +52,7 @@ def test_source_kind_agent_instruction(tmp_path):
 
 
 def test_source_kind_doc_file(tmp_path):
-    (tmp_path / "README.md").write_text("x")
+    (tmp_path / "notes.md").write_text("x")
     results = find_source_files(tmp_path)
     assert any(kind == "DocFile" for _, kind in results)
 

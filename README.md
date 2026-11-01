@@ -29,7 +29,7 @@ Agent-Hound models AI agent environments as five node types connected by four ed
 
 | Node | Role | Examples |
 | :--- | :--- | :--- |
-| **Source** | Local files that could influence an agent | `README.md`, `CLAUDE.md`, `AGENTS.md` |
+| **Source** | Local files that could influence an agent | `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, path-specific rules, prompts, custom agents |
 | **Agent** | Agent environment identified from its configuration | Claude Code, Codex |
 | **Capability** | Configured MCP servers, command hooks, and supported built-in tools | `filesystem`, `github`, `Read`, `Bash` |
 | **Asset** | Discovered sensitive files and source repositories | `~/.ssh/id_rsa`, `.env`, a local Git repository |

@@ -7,7 +7,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-SourceKind = Literal["WebPage", "GitHubIssue", "DocFile", "SlackThread", "Skill", "AgentInstruction"]
+SourceKind = Literal[
+    "WebPage",
+    "GitHubIssue",
+    "DocFile",
+    "SlackThread",
+    "Skill",
+    "PromptFile",
+    "AgentDefinition",
+    "AgentInstruction",
+]
 CapabilityKind = Literal["MCPServer", "MCPTool", "ShellHook", "Permission", "BuiltInTool"]
 AssetKind = Literal["SSHKey", "EnvFile", "AwsCredentials", "GCloudCredentials", "KubeConfig", "SourceCode"]
 ImpactKind = Literal["Exfiltration", "SupplyChainContamination", "SystemTakeover"]
