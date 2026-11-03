@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
+from agenthound.discovery.git_metadata import inspect_repository
 from agenthound.discovery.workspace import find_asset_files
 from agenthound.discovery.builtin_read import read_access
 from agenthound.models.edges import Edge
@@ -81,15 +82,20 @@ def collect_assets(capabilities: list[Capability], workspace: Path, scope: str) 
     for path_str, kind in raw:
         fpath = Path(path_str)
         name = fpath.name or fpath.resolve().name or path_str
+        asset_path = str(fpath.resolve()) if kind == "SourceCode" else path_str
         # writable=True only for SourceCode; other assets (SSHKey, EnvFile, etc.) are
         # marked False here even though shell-capable agents could write them.
         # The CanAccess edge covers the reachability — writable reflects file intent.
+        git = inspect_repository(fpath) if kind == "SourceCode" else None
         asset = Asset(
             name=name,
             asset_kind=kind,
-            path=path_str,
+            path=asset_path,
             readable=True,
             writable=kind == "SourceCode",
+            git_remote_repository=git.remote_repository if git else "",
+            git_upstream_branch=git.upstream_branch if git else "",
+            git_head_commit=git.head_commit if git else "",
         )
         if asset.objectid not in seen:
             result.assets.append(asset)

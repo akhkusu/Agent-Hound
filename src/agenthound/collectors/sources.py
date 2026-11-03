@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
+from agenthound.discovery.git_metadata import inspect_source
 from agenthound.discovery.workspace import find_source_files
 from agenthound.models.edges import Edge
-from agenthound.models.nodes import Agent, Source
+from agenthound.models.nodes import Agent, Asset, Source
 
 # Instruction files a specific agent reads automatically. A file mapped here
 # only influences its matching agents (confirmed); an unmapped instruction
@@ -85,11 +86,23 @@ def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResu
 
     for path_str, kind in raw:
         fpath = Path(path_str)
+        git = inspect_source(fpath)
+        repository_asset_id = ""
+        if git.repository_path:
+            repository_asset_id = Asset(
+                name=Path(git.repository_path).name,
+                asset_kind="SourceCode",
+                path=git.repository_path,
+            ).objectid
         source = Source(
             name=fpath.name,
             source_kind=kind,
             path=path_str,
             is_external=False,
+            git_repository_asset_id=repository_asset_id,
+            git_relative_path=git.relative_path,
+            git_committed=git.committed,
+            git_clean=git.clean,
         )
         if source.objectid not in seen:
             result.sources.append(source)

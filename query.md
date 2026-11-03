@@ -75,3 +75,14 @@ MATCH path = (c:Capability)-[:Triggers]->(i:Impact)
 RETURN i.impact_kind, count(path) AS path_count
 ORDER BY path_count DESC
 ```
+
+## GitHub Writers Who Can Supply Agent Sources
+
+Requires GitHound data and the Agent-Hound GitHub bridge.
+
+```cypher
+MATCH path = (u:GH_User)-[:GH_HasRole|GH_MemberOf|GH_HasBaseRole*1..]->
+  (:GH_RepoRole)-[:GH_CanWriteBranch]->(:GH_Branch)-[:AH_SuppliesSource]->
+  (:Source)-[:Influences]->(:Agent)
+RETURN path
+```

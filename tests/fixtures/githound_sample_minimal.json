@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "source_kind": "SOGitHub",
+    "fixture_source": "https://github.com/SpecterOps/GitHound/tree/main/samples",
+    "fixture_commit": "bcd3da195dd0681ade6cb027d8854716d4f768fd"
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "R_kgDOMuFnXA",
+        "kinds": ["GH_Repository"],
+        "properties": {
+          "name": "branchprotectiontest",
+          "node_id": "R_kgDOMuFnXA",
+          "environment_name": "SpecterTst",
+          "full_name": "SpecterTst/branchprotectiontest",
+          "html_url": "https://github.com/SpecterTst/branchprotectiontest",
+          "default_branch": "main"
+        }
+      },
+      {
+        "id": "REF_kwDOMuFnXK9yZWZzL2hlYWRzL21haW4",
+        "kinds": ["GH_Branch"],
+        "properties": {
+          "name": "branchprotectiontest\\main",
+          "node_id": "REF_kwDOMuFnXK9yZWZzL2hlYWRzL21haW4",
+          "repository_name": "branchprotectiontest",
+          "repository_id": "R_kgDOMuFnXA",
+          "short_name": "main",
+          "commit_hash": "581ba7f1403496187f0d6a61fb2cad3b0d33b8c5",
+          "protected": true
+        }
+      }
+    ],
+    "edges": [
+      {
+        "kind": "GH_HasBranch",
+        "start": {"value": "R_kgDOMuFnXA"},
+        "end": {"value": "REF_kwDOMuFnXK9yZWZzL2hlYWRzL21haW4"},
+        "properties": {"traversable": false}
+      }
+    ]
+  }
+}
