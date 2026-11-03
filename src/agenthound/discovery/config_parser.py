@@ -8,6 +8,7 @@ import platform
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from agenthound.discovery.builtin_read import read_capability
 from agenthound.discovery.builtin_bash import bash_capability
@@ -142,16 +143,19 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
     url = config.get("url")
     command = config.get("command")
     args = [str(a) for a in config.get("args", []) if a is not None]
-    transport = "sse" if url else "stdio"
+    transport = str(config.get("type") or config.get("transport") or ("http" if url else "stdio"))
     cmd_str: str | None = None
     if command:
-        cmd_str = command + (" " + " ".join(args) if args else "")
+        # Arguments frequently contain credentials. Export only the launcher;
+        # package identity and safe scope details have dedicated properties.
+        cmd_str = os.path.basename(command.replace("\\", "/"))
 
     fields: dict[str, Any] = {}
 
     hit = resolve_profile(command, args)
     if hit is not None:
         profile, payload_index = hit
+        fields["package_name"] = profile.package
         evidence = f"package:{profile.package}"
         if profile.note:
             evidence += f" ({profile.note})"
@@ -176,7 +180,10 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
         # Only the server name and what actually executes (command basename +
         # the launched package) seed keyword detection. Path/option-value args
         # are data — a "/home/git/cache" arg must not imply git_write.
-        tokens = _tokenize(name, *identity_tokens(command, args))
+        identities = identity_tokens(command, args)
+        tokens = _tokenize(name, *identities)
+        if identities:
+            fields["package_name"] = identities[-1]
         if shell_hits := _SHELL_TOKENS & tokens:
             fields["shell_exec"] = "suspected"
             fields["shell_evidence"] = f"keyword:{sorted(shell_hits)[0]}"
@@ -203,6 +210,41 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
     if binary in _SHELL_BINARIES and fields.get("shell_exec", "none") != "confirmed":
         fields["shell_exec"] = "suspected"
         fields["shell_evidence"] = f"shell-binary-launcher:{binary}"
+
+    env_names = set(config.get("env", {})) if isinstance(config.get("env"), dict) else set()
+    inherited_env = config.get("env_vars", [])
+    if isinstance(inherited_env, list):
+        env_names.update(str(item) for item in inherited_env)
+    header_names: set[str] = set()
+    for key in ("headers", "http_headers", "env_http_headers"):
+        value = config.get(key)
+        if isinstance(value, dict):
+            header_names.update(str(item) for item in value)
+    if config.get("bearer_token_env_var"):
+        env_names.add(str(config["bearer_token_env_var"]))
+        header_names.add("Authorization")
+    auth_parts = []
+    if any(re.search(r"TOKEN|KEY|AUTH|CREDENTIAL|SECRET", item, re.I) for item in env_names):
+        auth_parts.append("environment")
+    if any(item.lower() in {"authorization", "x-api-key", "api-key"} for item in header_names):
+        auth_parts.append("header")
+    enabled_tools = config.get("enabled_tools", [])
+    disabled_tools = config.get("disabled_tools", [])
+    fields.update(
+        configured_env_vars=tuple(sorted(env_names)),
+        configured_header_names=tuple(sorted(header_names)),
+        auth_kind="+".join(auth_parts) or "none",
+        tool_allowlist=tuple(str(item) for item in enabled_tools)
+        if isinstance(enabled_tools, list) else (),
+        tool_denylist=tuple(str(item) for item in disabled_tools)
+        if isinstance(disabled_tools, list) else (),
+        discovery_status="configured",
+    )
+    if isinstance(url, str):
+        parsed = urlsplit(url)
+        host = parsed.hostname or ""
+        port = f":{parsed.port}" if parsed.port else ""
+        fields["endpoint"] = urlunsplit((parsed.scheme, host + port, parsed.path, "", ""))
 
     return Capability(
         name=name,
@@ -281,7 +323,13 @@ def parse_config_data(config_path: Path, raw: dict[str, Any], agent: Agent | Non
         servers = raw.get("servers", {})
     if not servers and "mcp" in raw:
         servers = raw["mcp"].get("servers", {})
-    caps.extend(_parse_mcp_servers(servers, agent_scope))
+    mcp_caps = _parse_mcp_servers(servers, agent_scope)
+    mcp_evidence = "MCP configuration observed; runtime connection and advertised features unverified"
+    caps.extend(cap.model_copy(update={
+        "mcp_config_path": str(config_path),
+        "mcp_scope": "config",
+        "mcp_evidence": mcp_evidence,
+    }) for cap in mcp_caps)
 
     # Claude Code hooks
     if "hooks" in raw:

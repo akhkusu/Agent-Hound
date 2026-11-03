@@ -17,6 +17,7 @@ from agenthound.collectors.capabilities import collect_from_configs
 from agenthound.collectors.impact import check_internet, collect_impact
 from agenthound.collectors.sources import collect_sources
 from agenthound.discovery.config_parser import discover_config_files
+from agenthound.discovery.mcp_live import MCPDiscoveryUnavailable, collect_live_mcp
 from agenthound.discovery.runtime_identity import (
     RuntimeIdentityError,
     observe_claude_pid,
@@ -41,10 +42,15 @@ console = Console()
 @click.option("--verbose", "-v", is_flag=True)
 @click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
 @click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
+@click.option("--discover-mcp", is_flag=True,
+              help="Actively start/connect to configured MCP servers and list advertised metadata.")
+@click.option("--mcp-timeout", type=click.FloatRange(min=1.0, max=60.0), default=10.0,
+              show_default=True, help="Per-server live MCP discovery timeout in seconds.")
 @click.version_option(version=__version__)
 @click.pass_context
 def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
-        output: Path, verbose: bool, claude_pid: int | None, process_identity: bool) -> None:
+        output: Path, verbose: bool, claude_pid: int | None, process_identity: bool,
+        discover_mcp: bool, mcp_timeout: float) -> None:
     """Agent-Hound — BloodHound OpenGraph collector for AI agent attack paths."""
     ctx.ensure_object(dict)
     ctx.obj.update({"workspace": workspace, "scope": scope, "output": output, "verbose": verbose})
@@ -53,7 +59,8 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
             click.echo(ctx.get_help())
             return
         _run_scan([config], workspace, scope, output, verbose, claude_pid=claude_pid,
-                  process_identity=process_identity)
+                  process_identity=process_identity, discover_mcp=discover_mcp,
+                  mcp_timeout=mcp_timeout)
 
 
 @cli.command()
@@ -66,6 +73,10 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
 @click.option("--verbose", "-v", is_flag=True)
 @click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
 @click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
+@click.option("--discover-mcp", is_flag=True,
+              help="Actively start/connect to configured MCP servers and list advertised metadata.")
+@click.option("--mcp-timeout", type=click.FloatRange(min=1.0, max=60.0), default=10.0,
+              show_default=True, help="Per-server live MCP discovery timeout in seconds.")
 @click.option("--copilot/--no-copilot", default=True, show_default=True,
               help="Include local Windows Copilot observations when LocalAppData is available.")
 @click.option("--local-app-data", type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -81,7 +92,8 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
 @click.option("--enumerate-all", is_flag=True,
               help="Finish recursive SharePoint enumeration; --limit still bounds retained document nodes.")
 def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pid: int | None,
-             process_identity: bool, copilot: bool, local_app_data: Path | None,
+             process_identity: bool, discover_mcp: bool, mcp_timeout: float,
+             copilot: bool, local_app_data: Path | None,
              include_registry: bool, m365: bool, m365_snapshot: Path | None,
              site_url: str | None, copilot_client_id: str | None, limit: int,
              enumerate_all: bool) -> None:
@@ -137,7 +149,9 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pi
         for p in config_paths:
             console.print(f"  {p}")
     _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=True,
-              claude_pid=claude_pid, process_identity=process_identity, extra_graphs=extra_graphs)
+              claude_pid=claude_pid, process_identity=process_identity,
+              discover_mcp=discover_mcp, mcp_timeout=mcp_timeout,
+              extra_graphs=extra_graphs)
 
 
 def _validate_inventory_destinations(inventory: dict[str, Any], destinations: list[Path]) -> None:
@@ -371,7 +385,9 @@ def m365_files(api: str | None, tenant_id: str | None, site_url: str | None, dri
 
 def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,
               merge_claude: bool = False, claude_pid: int | None = None,
-              process_identity: bool = False, extra_graphs: list[dict[str, Any]] | None = None) -> None:
+              process_identity: bool = False, discover_mcp: bool = False,
+              mcp_timeout: float = 10.0,
+              extra_graphs: list[dict[str, Any]] | None = None) -> None:
     from agenthound.output.attack_paths import print_attack_paths
     from agenthound.output.unified import merge_graphs
 
@@ -395,6 +411,25 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
                                      "runtime_computer_sid": identity.computer_sid})
             if agent == claude_agents[0] else agent for agent in cap_result.agents
         ]
+    live_sources = []
+    if discover_mcp:
+        console.print(
+            "[yellow]Live MCP discovery starts configured stdio commands and may send "
+            "configured credentials to remote servers.[/yellow]"
+        )
+        try:
+            live_result = collect_live_mcp(cap_result.capabilities, workspace, mcp_timeout)
+        except MCPDiscoveryUnavailable as exc:
+            raise click.ClickException(str(exc)) from exc
+        server_updates = {
+            cap.objectid: cap for cap in live_result.capabilities if cap.cap_kind == "MCPServer"
+        }
+        tools = [cap for cap in live_result.capabilities if cap.cap_kind == "MCPTool"]
+        cap_result.capabilities = [
+            server_updates.get(cap.objectid, cap) for cap in cap_result.capabilities
+        ] + tools
+        cap_result.edges.extend(live_result.edges)
+        live_sources = live_result.sources
     internet = check_internet() if cap_result.capabilities else False
 
     if verbose:
@@ -405,8 +440,9 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
     combined.agents = cap_result.agents
     combined.capabilities = cap_result.capabilities
     combined.edges.extend(cap_result.edges)
+    combined.sources.extend(live_sources)
 
-    seen_source_ids: set[str] = set()
+    seen_source_ids: set[str] = {source.objectid for source in live_sources}
     for agent in cap_result.agents:
         src = collect_sources(agent=agent, workspace=workspace, scope=scope)
         # A source file is one node; only the Influences edge is per-agent.

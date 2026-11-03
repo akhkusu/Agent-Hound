@@ -51,7 +51,7 @@ For authored M365 declarative agents, Microsoft's documented configuration is `a
 agenthound m365-import --snapshot examples/m365_snapshot.json -o m365_graph.json
 ```
 
-The example is a **synthetic scenario**, not a live tenant export. Its five documents mirror the ORION dataset: overview, meeting minutes, acquisition, customer pricing and staffing. An editor can modify the minutes. An executive can read the restricted documents and uses an agent configured with the minutes. The resulting graph contains candidate IPI paths from the minutes through Copilot to accessible documents. Editor identities and ACL relations are analysis inputs, not displayed nodes or edges. This is not evidence of exploitation.
+The example is a **synthetic scenario**, not a live tenant export. An external consultant can update project meeting notes, and an executive assistant can update a briefing template. The executive's Copilot session has retrieved the meeting notes, while a declarative agent uses the briefing template as a configured knowledge source. The same executive account can read acquisition, customer-pricing and workforce-planning documents. The resulting graph contains candidate paths from both source documents through Copilot to those accessible documents. Contributor identities and ACL relations are analysis inputs, not displayed nodes or edges. This is not evidence of exploitation.
 
 The version-1 JSON schema is implemented by `M365Snapshot` in `discovery/m365_snapshot.py`. It rejects extra fields, invalid roles, duplicate entity IDs and unresolved references. It contains:
 
