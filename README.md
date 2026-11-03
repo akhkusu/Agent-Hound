@@ -40,7 +40,7 @@ Agent-Hound models AI agent environments as five node types connected by four ed
 ---
 
 
-## Usage
+## Basic Usage
 
 ### Installation
 
@@ -68,42 +68,25 @@ Open **BloodHound CE** (v8.0+), go to **File Ingest**, and upload the generated 
 
 See [query.md](query.md) for example Cypher queries. For a graph preview without a live scan, see the [sample output](examples/sample_output.json) and [demo graph](examples/demo.json).
 
-### Windows Copilot and Microsoft 365
+## Extended Usage
 
-Use the same entry point for local agents and SharePoint:
+### Microsoft 365 Copilot
+
+Agent-Hound can collect information from Microsoft 365 and Copilot environments and map which resources may influence Copilot and which resources the same account may be able to access, such as SharePoint documents.
 
 ```powershell
-# One graph: local agents plus live SharePoint file metadata using Copilot WAM
 agenthound discover --m365 -o combined_graph.json
-
-# One graph: local agents plus an existing evidence-backed M365 snapshot
-agenthound discover --m365-snapshot examples/m365_snapshot.json -o combined_graph.json
-
-# Enumerate discovered SharePoint locations fully and retain up to 100,000 files
-agenthound discover --scope all --m365 --enumerate-all --limit 100000 -o .local/environment_graph.json
 ```
 
-`--m365` requires the Windows authentication dependencies and an existing authorized Copilot account. It retains up to 20 file metadata records by default (`--limit` changes this). Each document has its own node with its original filename. The graph uses the existing `Agent`, `Capability`, `Asset` and `Source` kinds. ACL identities and group membership are inputs to reachability analysis, not additional displayed node/edge kinds.
+`--m365` requires Windows and an existing authorized Copilot account.
 
-Normal M365 collection targets visible document and site-content libraries, such as Documents and Site Pages. Hidden libraries, `_catalogs`, form templates, converted forms, Style Library and root `Forms` folders are excluded. Library names are not required to be English, and file extensions are not used as an exclusion rule.
+See the [Microsoft 365 Copilot integration guide](docs/m365-integration.md).
 
-Documents are both `Source` and `Asset` nodes. Each has a conditional `Influences → Copilot → HasCapability → document read → CanAccess → document` route, so the **Full Attack Chain** query also returns Copilot candidates. These edges are `suspected`, require explicit document context, and retain `retrieval_verified: false`: metadata listing proves account-level discovery, not actual model ingestion. `metadata_access_verified` preserves the API observation. Snapshot references can provide stronger per-document retrieval evidence. See [the integration guide](docs/m365-integration.md).
+### Connecting to Other Graphs
 
-Metadata-only observations also carry `content_access_verification: not_tested`. A false `content_access_verified` means document download has not been verified; it does not establish denial. A separately verified REST download proves API content access for that document, while Copilot inference retrieval remains a separate observation.
+Agent-Hound can connect its AI agent graph to data collected by other BloodHound collectors.
 
-Codex collection includes a suspected workspace read capability even when no MCP server is configured. A shell candidate requires an explicit write-capable sandbox configuration and is suppressed when its shell tool is disabled. Runtime trust, managed policy and CLI overrides remain unverified. See [OpenAI's approvals and security documentation](https://learn.chatgpt.com/docs/agent-approvals-security).
-
-The focused `copilot-windows`, `m365-import` and `m365-files` commands remain available for inventory or troubleshooting. Generic OpenGraph output can be displayed with the supplied Cypher queries; standard BloodHound Pathfinding requires a separately installed extension definition schema, which this repository does not yet provide. See [the OpenGraph graph model documentation](https://bloodhound.specterops.io/opengraph/developer/graph-data).
-
-`agenthound m365-files` uses the existing Windows Copilot account to discover SharePoint locations and display up to 20 file metadata records by default, without a new app registration or external authentication CLI. Counts distinguish library-reported items, enumerated metadata and unverified content access. See [usage](docs/m365-files.md) and [how authentication, discovery and counts work](docs/copilot-sharepoint-auth.md).
-
-Machine-specific lab scripts, live evidence, chat transcripts and collected inventory belong under `.local/` (ignored by Git and workspace scanning). Public examples and tests must use synthetic data. See [the contribution boundary](docs/local-data.md).
-
-## Connecting to Other Graphs
-
-Agent-Hound can connect its AI agent graph to data collected by other BloodHound tools.
-
-### Active Directory
+#### Active Directory
 
 Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace paths from AI agent environments to AD users, computers, and groups. See the [AD integration guide](docs/ad-integration.md).
 
@@ -111,7 +94,7 @@ Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace path
   <img src="img/ad-pathfinding-poc.png" alt="PoC BloodHound path from README.md through Claude Code to an AD group" width="100%"/>
 </p>
 
-### GitHub
+#### GitHub
 
 Connect Agent-Hound's OpenGraph data to a GitHound graph in BloodHound and trace paths between GitHub repositories and AI agent environments. The example below shows one use case: identifying GitHub users who can write to source files that influence an AI agent. See the [GitHound integration guide](docs/github-integration.md).
 
