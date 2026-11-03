@@ -30,7 +30,7 @@ Agent-Hound models AI agent environments as five node types connected by four ed
 | Node | Role | Examples |
 | :--- | :--- | :--- |
 | **Source** | Local files that could influence an agent | `README.md`, `CLAUDE.md`, `AGENTS.md` |
-| **Agent** | Agent environment identified from its configuration | Claude Code, Codex |
+| **Agent** | Agent environment or observed API session | Claude Code, Codex, Copilot |
 | **Capability** | Configured MCP servers, command hooks, and supported built-in tools | `filesystem`, `github`, `Read`, `Bash` |
 | **Asset** | Discovered sensitive files and source repositories | `~/.ssh/id_rsa`, `.env`, a local Git repository |
 | **Impact** | Potential consequences inferred from capabilities and environment checks | `System-Takeover`, `Internet-Exfiltration`, `Supply-Chain-Contamination` |
@@ -40,7 +40,7 @@ Agent-Hound models AI agent environments as five node types connected by four ed
 ---
 
 
-## Usage
+## Basic Usage
 
 ### Installation
 
@@ -60,7 +60,7 @@ cd /path/to/project
 agenthound discover -o output.json -v
 ```
 
-`discover` automatically reads supported configuration files from the home directory and project. For additional options, run `agenthound --help` or `agenthound discover --help`.
+`discover` reads supported home/project configuration and includes local Windows Copilot observations when `LOCALAPPDATA` is available. It writes one graph and prints an **Attack Paths** preview with agent, capability, document name, confidence and context requirements. Use `--no-copilot` to skip local Copilot inventory, or `--local-app-data` for an authorized offline copy. For options, run `agenthound discover --help`.
 
 ### Import into BloodHound
 
@@ -68,12 +68,38 @@ Open **BloodHound CE** (v8.0+), go to **File Ingest**, and upload the generated 
 
 See [query.md](query.md) for example Cypher queries. For a graph preview without a live scan, see the [sample output](examples/sample_output.json) and [demo graph](examples/demo.json).
 
-## Connecting to an AD Graph
+## Extended Usage
+
+### Microsoft 365 Copilot
+
+Agent-Hound can collect information from Microsoft 365 and Copilot environments and map which resources may influence Copilot and which resources the same account may be able to access, such as SharePoint documents.
+
+```powershell
+agenthound discover --m365 -o combined_graph.json
+```
+
+`--m365` requires Windows and an existing authorized Copilot account.
+
+See the [Microsoft 365 Copilot integration guide](docs/m365-integration.md).
+
+### Connecting to Other Graphs
+
+Agent-Hound can connect its AI agent graph to data collected by other BloodHound collectors.
+
+#### Active Directory
 
 Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace paths from AI agent environments to AD users, computers, and groups. See the [AD integration guide](docs/ad-integration.md).
 
 <p align="center">
   <img src="img/ad-pathfinding-poc.png" alt="PoC BloodHound path from README.md through Claude Code to an AD group" width="100%"/>
+</p>
+
+#### GitHub
+
+Connect Agent-Hound's OpenGraph data to a GitHound graph in BloodHound and trace paths between GitHub repositories and AI agent environments. The example below shows one use case: identifying GitHub users who can write to source files that influence an AI agent. See the [GitHound integration guide](docs/github-integration.md).
+
+<p align="center">
+  <img src="img/github-githound-integration.png" alt="GitHound users and repository roles connected through Agent-Hound sources to a local coding agent" width="100%"/>
 </p>
 
 ---

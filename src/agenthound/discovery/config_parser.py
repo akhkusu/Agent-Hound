@@ -246,7 +246,7 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
         from agenthound.discovery.codex_settings import collect_codex_settings
         return collect_codex_settings([config_path], config_path.parent.parent)
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8-sig") as f:
             raw: dict[str, Any] = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Cannot parse config {config_path}: {exc}") from exc
