@@ -60,13 +60,11 @@ cd /path/to/project
 agenthound discover -o output.json -v
 ```
 
-`discover` reads supported home/project configuration and includes local Windows Copilot observations when `LOCALAPPDATA` is available. It writes one graph and prints an **Attack Paths** preview with agent, capability, document name, confidence and context requirements. Use `--no-copilot` to skip local Copilot inventory, or `--local-app-data` for an authorized offline copy. For options, run `agenthound discover --help`.
+`discover` scans supported agent configurations and writes a BloodHound OpenGraph file. Run `agenthound discover --help` for collection options.
 
 ### Import into BloodHound
 
-Open **BloodHound CE** (v8.0+), go to **File Ingest**, and upload the generated OpenGraph JSON. Explore the graph using Search or Cypher.
-
-See [query.md](query.md) for example Cypher queries. For a graph preview without a live scan, see the [sample output](examples/sample_output.json) and [demo graph](examples/demo.json).
+Upload the generated JSON through **File Ingest** in **BloodHound CE** (v8.0+), then explore it using Search or Cypher. See [query.md](query.md) for Cypher examples or the [demo graph](examples/demo.json) for a preview.
 
 ## Extended Usage
 
