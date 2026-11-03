@@ -115,6 +115,7 @@ WHERE entry.asset_kind = 'SharePointDocument'
   AND target.asset_kind = 'SharePointDocument'
   AND target.classification <> 'unclassified'
   AND entry <> target
+  AND NOT (target)-[:Influences]->(agent)
   AND access.access_scope = 'document_content'
 RETURN p
 ```

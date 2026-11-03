@@ -73,10 +73,10 @@ def test_merge_does_not_join_local_and_cloud_agents_by_name():
 def test_snapshot_paths_preserve_context_and_weakest_confidence():
     data = snapshot()
     agent = data["agents"][0]
-    agent["references"] = [{"document_id": "orion-pricing", "mode": "retrieved",
+    agent["references"] = [{"document_id": "customer-pricing", "mode": "retrieved",
                             "evidence": "Known content verified", "retrieval_route": "explicit_document_context"}]
     paths = list(attack_paths(build_m365_graph(M365Snapshot.model_validate(data))))
-    retrieved = next(p for p in paths if p["target"].endswith("価格.xlsx"))
+    retrieved = next(p for p in paths if p["target"] == "Enterprise Customer Pricing.xlsx")
     assert retrieved["confidence"] == "confirmed"
     assert retrieved["context"] == "explicit document context required"
     assert any(p["confidence"] == "suspected" for p in paths)
@@ -94,7 +94,7 @@ def test_discover_combines_copilot_and_snapshot_without_local_configs(tmp_path, 
     graph = json.loads(out.read_text(encoding="utf-8"))["graph"]
     assert len([n for n in graph["nodes"] if "Agent" in n["kinds"]]) == 2
     assert "Attack Paths" in result.output
-    assert any(n["properties"].get("name") == "Project_ORION_顧客別価格.xlsx" for n in graph["nodes"])
+    assert any(n["properties"].get("name") == "Enterprise Customer Pricing.xlsx" for n in graph["nodes"])
     assert {e["kind"] for e in graph["edges"]} <= {"HasCapability", "CanAccess", "Influences"}
 
 

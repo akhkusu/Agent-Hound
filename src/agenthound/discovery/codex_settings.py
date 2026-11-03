@@ -9,7 +9,7 @@ from typing import Any
 try:
     import tomllib
 except ModuleNotFoundError:
-    import tomli as tomllib
+    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
 
 from agenthound.discovery.codex_builtin import codex_builtin_capabilities
 from agenthound.discovery.config_parser import _build_mcp_capability
@@ -53,7 +53,7 @@ def collect_codex_settings(paths: list[Path], workspace: Path) -> tuple[Agent, l
     for name, (server, path) in servers.items():
         if server.get("enabled") is False:
             continue
-        config = {key: server[key] for key in ("command", "args", "url") if key in server}
+        config = dict(server)
         if not isinstance(config.get("command", ""), str) or not isinstance(config.get("args", []), list):
             continue
         capability = _build_mcp_capability(name, config, agent.objectid)

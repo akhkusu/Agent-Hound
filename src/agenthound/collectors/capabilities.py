@@ -100,6 +100,14 @@ def _merge_capabilities(a: Capability, b: Capability) -> Capability:
         file_evidence=_merge_evidence(a.file_evidence, b.file_evidence),
         network_evidence=_merge_evidence(a.network_evidence, b.network_evidence),
         git_evidence=_merge_evidence(a.git_evidence, b.git_evidence),
+        package_name=a.package_name or b.package_name,
+        endpoint=a.endpoint or b.endpoint,
+        configured_env_vars=tuple(sorted(set(a.configured_env_vars) | set(b.configured_env_vars))),
+        configured_header_names=tuple(sorted(set(a.configured_header_names) | set(b.configured_header_names))),
+        auth_kind=a.auth_kind if a.auth_kind != "none" else b.auth_kind,
+        tool_allowlist=tuple(sorted(set(a.tool_allowlist) | set(b.tool_allowlist))),
+        tool_denylist=tuple(sorted(set(a.tool_denylist) | set(b.tool_denylist))),
+        discovery_status=a.discovery_status or b.discovery_status,
     )
 
 

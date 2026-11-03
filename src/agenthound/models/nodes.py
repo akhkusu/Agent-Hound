@@ -7,7 +7,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
-SourceKind = Literal["WebPage", "GitHubIssue", "DocFile", "SlackThread", "Skill", "AgentInstruction"]
+SourceKind = Literal[
+    "WebPage",
+    "GitHubIssue",
+    "DocFile",
+    "SlackThread",
+    "Skill",
+    "AgentInstruction",
+    "MCPResource",
+    "MCPPrompt",
+]
 CapabilityKind = Literal["MCPServer", "MCPTool", "ShellHook", "Permission", "BuiltInTool"]
 AssetKind = Literal["SSHKey", "EnvFile", "AwsCredentials", "GCloudCredentials", "KubeConfig", "SourceCode"]
 ImpactKind = Literal["Exfiltration", "SupplyChainContamination", "SystemTakeover"]
@@ -74,10 +83,17 @@ class Source(BaseModel):
     git_relative_path: str = ""
     git_committed: bool = False
     git_clean: bool = False
+    description: str = ""
+    mime_type: str = ""
+    mcp_server: str = ""
+    arguments: tuple[str, ...] = ()
+    discovery_status: str = ""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def objectid(self) -> str:
+        if self.mcp_server:
+            return _hash_id("source", self.source_kind, self.path, self.mcp_server)
         return _hash_id("source", self.source_kind, self.path)
 
     def to_opengraph(self) -> dict[str, Any]:
@@ -95,6 +111,16 @@ class Source(BaseModel):
                 git_committed=self.git_committed,
                 git_clean=self.git_clean,
             )
+        if self.description:
+            properties["description"] = self.description
+        if self.mime_type:
+            properties["mime_type"] = self.mime_type
+        if self.mcp_server:
+            properties["mcp_server"] = self.mcp_server
+        if self.arguments:
+            properties["arguments"] = list(self.arguments)
+        if self.discovery_status:
+            properties["discovery_status"] = self.discovery_status
         return {
             "id": self.objectid,
             "kinds": ["Source"],
@@ -140,6 +166,30 @@ class Capability(BaseModel):
     mcp_config_path: str = ""
     mcp_scope: str = ""
     mcp_evidence: str = ""
+    package_name: str = ""
+    endpoint: str = ""
+    configured_env_vars: tuple[str, ...] = ()
+    configured_header_names: tuple[str, ...] = ()
+    auth_kind: str = "none"
+    tool_allowlist: tuple[str, ...] = ()
+    tool_denylist: tuple[str, ...] = ()
+    description: str = ""
+    input_schema: str = ""
+    output_schema: str = ""
+    read_only_hint: bool | None = None
+    destructive_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    open_world_hint: bool | None = None
+    discovery_status: str = ""
+    discovery_error: str = ""
+    discovered_at: str = ""
+    protocol_version: str = ""
+    server_implementation: str = ""
+    server_version: str = ""
+    advertised_tools: int | None = None
+    advertised_resources: int | None = None
+    advertised_prompts: int | None = None
+    discovery_truncated: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -175,6 +225,43 @@ class Capability(BaseModel):
         if self.mcp_config_path:
             props.update(config_path=self.mcp_config_path, mcp_scope=self.mcp_scope,
                          evidence=self.mcp_evidence)
+        for text_key, text_value in (
+            ("package_name", self.package_name),
+            ("endpoint", self.endpoint),
+            ("auth_kind", self.auth_kind if self.auth_kind != "none" else ""),
+            ("description", self.description),
+            ("input_schema", self.input_schema),
+            ("output_schema", self.output_schema),
+            ("discovery_status", self.discovery_status),
+            ("discovery_error", self.discovery_error),
+            ("discovered_at", self.discovered_at),
+            ("protocol_version", self.protocol_version),
+            ("server_implementation", self.server_implementation),
+            ("server_version", self.server_version),
+        ):
+            if text_value:
+                props[text_key] = text_value
+        for list_key, list_value in (
+            ("configured_env_vars", self.configured_env_vars),
+            ("configured_header_names", self.configured_header_names),
+            ("tool_allowlist", self.tool_allowlist),
+            ("tool_denylist", self.tool_denylist),
+        ):
+            if list_value:
+                props[list_key] = list(list_value)
+        for hint_key, hint_value in (
+            ("read_only_hint", self.read_only_hint),
+            ("destructive_hint", self.destructive_hint),
+            ("idempotent_hint", self.idempotent_hint),
+            ("open_world_hint", self.open_world_hint),
+            ("advertised_tools", self.advertised_tools),
+            ("advertised_resources", self.advertised_resources),
+            ("advertised_prompts", self.advertised_prompts),
+        ):
+            if hint_value is not None:
+                props[hint_key] = hint_value
+        if self.discovery_truncated:
+            props["discovery_truncated"] = True
         if self.transport is not None:
             props["transport"] = self.transport
         if self.allowed_paths is not None:
