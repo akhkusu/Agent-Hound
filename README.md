@@ -88,7 +88,7 @@ Agent-Hound can connect its AI agent graph to data collected by other BloodHound
 
 #### Active Directory
 
-Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace paths from AI agent environments to AD users, computers, and groups. See the [AD integration guide](docs/ad-integration.md).
+Connect Agent-Hound's OpenGraph data to an AD graph collected by [SharpHound](https://github.com/specterops/sharphound) in BloodHound and trace paths from AI agent environments to AD users, computers, and groups. See the [AD integration guide](docs/ad-integration.md).
 
 <p align="center">
   <img src="img/ad-pathfinding-poc.png" alt="PoC BloodHound path from README.md through Claude Code to an AD group" width="100%"/>
@@ -96,7 +96,7 @@ Connect Agent-Hound's OpenGraph data to an AD graph in BloodHound and trace path
 
 #### GitHub
 
-Connect Agent-Hound's OpenGraph data to a GitHound graph in BloodHound and trace paths between GitHub repositories and AI agent environments. The example below shows one use case: identifying GitHub users who can write to source files that influence an AI agent. See the [GitHound integration guide](docs/github-integration.md).
+Connect Agent-Hound's OpenGraph data to a [GitHound](https://github.com/SpecterOps/GitHound) graph in BloodHound and trace paths between GitHub repositories and AI agent environments. The example below shows one use case: identifying GitHub users who can write to source files that influence an AI agent. See the [GitHound integration guide](docs/github-integration.md).
 
 <p align="center">
   <img src="img/github-githound-integration.png" alt="GitHound users and repository roles connected through Agent-Hound sources to a local coding agent" width="100%"/>
