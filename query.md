@@ -18,7 +18,7 @@ Run these in the **Cypher** tab of BloodHound CE after ingesting Agent-Hound out
 |------|-----------|---------|
 | `Influences` | Source → Agent | IPI vector |
 | `HasCapability` | Agent → Capability | Tool is enabled |
-| `CanAccess` | Capability → Asset | Tool can reach this file |
+| `CanAccess` | Capability → Asset | Scope-limited access; inspect `access_scope`, confidence and evidence |
 | `Triggers` | Capability → Impact | Tool produces this consequence |
 
 ---
@@ -75,6 +75,51 @@ MATCH path = (c:Capability)-[:Triggers]->(i:Impact)
 RETURN i.impact_kind, count(path) AS path_count
 ORDER BY path_count DESC
 ```
+
+## Microsoft 365 and SharePoint
+
+Copilot uses the existing Agent, Capability, Source and Asset kinds. ACL identities remain analysis inputs. These Cypher queries display the exported graph; they do not register standard BloodHound Pathfinding support.
+
+Display candidate document-content paths with individual document names:
+
+```cypher
+MATCH p=(agent:Agent)-[:HasCapability]->(cap:Capability)-[access:CanAccess]->(document:Asset)
+WHERE agent.platform = 'Microsoft 365 Copilot'
+  AND access.access_scope = 'document_content'
+RETURN p
+```
+
+Show names, confidence and whether retrieval was observed:
+
+```cypher
+MATCH (agent:Agent)-[:HasCapability]->(:Capability)-[access:CanAccess]->(document:Asset)
+WHERE document.asset_kind = 'SharePointDocument'
+RETURN agent.displayname, document.name, document.path,
+       access.access_scope, access.confidence, access.retrieval_verified,
+       access.retrieval_route, access.requires_explicit_document_context
+```
+
+Show complete candidate IPI paths through Copilot. The live collector marks these suspected and conditional on explicitly supplying the document:
+
+```cypher
+MATCH p=(source:Source)-[:Influences]->(agent:Agent)-[:HasCapability]->(:Capability)-[:CanAccess]->(document:Asset)
+WHERE agent.platform = 'Microsoft 365 Copilot'
+RETURN p
+```
+
+Show a referenced document influencing Copilot and its candidate route to a different restricted document:
+
+```cypher
+MATCH p=(entry:Source)-[:Influences]->(agent:Agent)-[:HasCapability]->(:Capability)-[access:CanAccess]->(target:Asset)
+WHERE entry.asset_kind = 'SharePointDocument'
+  AND target.asset_kind = 'SharePointDocument'
+  AND target.classification <> 'unclassified'
+  AND entry <> target
+  AND access.access_scope = 'document_content'
+RETURN p
+```
+
+Use `access.retrieval_verified = true` when filtering for observed retrieval. Even then, `explicit_document_context` requires supplying that particular document; it does not establish autonomous browsing.
 
 ## GitHub Writers Who Can Supply Agent Sources
 

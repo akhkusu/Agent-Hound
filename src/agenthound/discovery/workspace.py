@@ -25,7 +25,7 @@ _SOURCE_DIRS = {"docs", "context", "prompts", "instructions", "knowledge"}
 _EXCLUDED_DIRS = {
     ".git", "__pycache__", "node_modules", ".venv", "venv", "vendor",
     "dist", "build", ".tox", ".mypy_cache", ".pytest_cache", "site-packages",
-    ".next", "target",
+    ".next", "target", ".local",
 }
 
 # .env variants that are templates/samples, not real secrets.

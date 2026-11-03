@@ -11,6 +11,7 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib
 
+from agenthound.discovery.codex_builtin import codex_builtin_capabilities
 from agenthound.discovery.config_parser import _build_mcp_capability
 from agenthound.models.nodes import Agent, Capability
 
@@ -33,8 +34,14 @@ def collect_codex_settings(paths: list[Path], workspace: Path) -> tuple[Agent, l
     workspace = workspace.resolve()
     agent = Agent(name="codex", platform="Codex", config_path=str(workspace / ".codex"))
     servers: dict[str, tuple[dict[str, Any], Path]] = {}
+    policy: dict[str, Any] = {}
     for path in paths:
         raw = read_codex_config(path)
+        # Keep only documented, non-secret capability switches for the model.
+        if "sandbox_mode" in raw:
+            policy["sandbox_mode"] = raw["sandbox_mode"]
+        if isinstance(raw.get("features"), dict) and "shell_tool" in raw["features"]:
+            policy.setdefault("features", {})["shell_tool"] = raw["features"]["shell_tool"]
         configured = raw.get("mcp_servers", {})
         if not isinstance(configured, dict):
             continue
@@ -67,4 +74,5 @@ def collect_codex_settings(paths: list[Path], workspace: Path) -> tuple[Agent, l
             "mcp_evidence": "Codex MCP configuration observed; trust, tool policy and runtime use unverified",
         })
         capabilities.append(capability)
+    capabilities.extend(codex_builtin_capabilities(agent, policy, workspace))
     return agent, capabilities

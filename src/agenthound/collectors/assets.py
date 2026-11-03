@@ -6,8 +6,9 @@ from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
 from agenthound.discovery.git_metadata import inspect_repository
-from agenthound.discovery.workspace import find_asset_files
 from agenthound.discovery.builtin_read import read_access
+from agenthound.discovery.codex_builtin import codex_builtin_access
+from agenthound.discovery.workspace import find_asset_files
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Asset, Capability
 
@@ -102,7 +103,9 @@ def collect_assets(capabilities: list[Capability], workspace: Path, scope: str) 
             seen.add(asset.objectid)
             for cap in privileged:
                 if cap.cap_kind == "BuiltInTool":
-                    properties = read_access(cap, asset, workspace)
+                    properties = (codex_builtin_access(cap, asset, workspace)
+                                  if cap.file_evidence.startswith("builtin:codex:")
+                                  else read_access(cap, asset, workspace))
                     if properties is not None:
                         result.edges.append(Edge(start=cap.objectid, end=asset.objectid, kind="CanAccess", properties=properties))
                     continue

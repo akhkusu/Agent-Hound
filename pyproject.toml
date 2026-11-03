@@ -16,6 +16,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+windows-auth = [
+    "winrt-Windows.Security.Authentication.Web.Core>=4!10.0.28000.2957; sys_platform == 'win32'",
+    "winrt-Windows.Security.Credentials>=4!10.0.28000.2957; sys_platform == 'win32'",
+    "winrt-Windows.System>=4!10.0.28000.2957; sys_platform == 'win32'",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov",
