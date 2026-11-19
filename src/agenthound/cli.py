@@ -481,7 +481,12 @@ def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, 
     table.add_column("Pillar", style="cyan")
     table.add_column("Scanning", style="green")
     table.add_row("Capabilities", ", ".join(str(p.name) for p in config_paths))
-    table.add_row("Sources", str(workspace) if scope in ("workspace", "all") else "skipped")
+    source_scope = {
+        "workspace": str(workspace),
+        "global": "user/system skills",
+        "all": f"{workspace} + user/system skills",
+    }[scope]
+    table.add_row("Sources", source_scope)
     table.add_row("Assets", f"home dir + {workspace}" if scope == "all" else scope)
     table.add_row("Impact", f"connectivity={'reachable' if internet else 'blocked'} + shell + git")
     console.print(table)

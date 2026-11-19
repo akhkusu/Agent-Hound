@@ -6,6 +6,7 @@ from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
 from agenthound.discovery.git_metadata import inspect_source
+from agenthound.discovery.skills import find_user_skills, skill_info
 from agenthound.discovery.workspace import find_source_files
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Agent, Asset, Source
@@ -21,11 +22,74 @@ _INSTRUCTION_TARGETS: dict[str, set[str]] = {
 }
 
 
+def _path_targets(
+    source: Source, rel: tuple[str, ...] | None
+) -> tuple[set[str], str] | None:
+    if rel is None or len(rel) < 3:
+        return None
+    root: tuple[str, str] = (rel[0], rel[1])
+    if source.source_kind == "Skill":
+        targets = {
+            (".agents", "skills"): {"codex", "vscode-copilot"},
+            (".claude", "skills"): {"claude-code", "vscode-copilot"},
+            (".github", "skills"): {"vscode-copilot"},
+        }.get(root)
+        return (targets, "skill") if targets else None
+    if source.source_kind == "PromptFile":
+        targets = {
+            (".claude", "commands"): {"claude-code"},
+            (".github", "prompts"): {"vscode-copilot"},
+        }.get(root)
+        return (targets, "prompt") if targets else None
+    if source.source_kind == "AgentDefinition":
+        targets = {
+            (".claude", "agents"): {"claude-code"},
+            (".github", "agents"): {"vscode-copilot"},
+        }.get(root)
+        return (targets, "agent-definition") if targets else None
+    if source.source_kind == "AgentInstruction":
+        targets = {
+            (".claude", "rules"): {"claude-code"},
+            (".cursor", "rules"): {"cursor"},
+            (".github", "instructions"): {"vscode-copilot"},
+        }.get(root)
+        return (targets, "instruction") if targets else None
+    return None
+
+
 def _relative_parts(source: Source, workspace: Path) -> tuple[str, ...] | None:
     try:
         return Path(source.path).resolve().relative_to(workspace.resolve()).parts
     except (OSError, ValueError):
         return None
+
+
+def _source_name(path: Path, kind: str, workspace: Path) -> str:
+    try:
+        rel = path.resolve().relative_to(workspace.resolve()).parts
+    except (OSError, ValueError):
+        rel = ()
+    root = rel[:2]
+    if kind == "Skill":
+        return f"Skill: {path.parent.name}"
+    if kind == "PromptFile":
+        prompt_name = path.name.removesuffix(".prompt.md").removesuffix(".md")
+        prefix = "Claude Command" if root == (".claude", "commands") else "Copilot Prompt"
+        return f"{prefix}: {prompt_name}"
+    if kind == "AgentDefinition":
+        prefix = "Claude Agent" if root == (".claude", "agents") else "Copilot Agent"
+        return f"{prefix}: {path.stem}"
+    if kind == "AgentInstruction":
+        if rel == (".github", "copilot-instructions.md"):
+            return "Copilot Instructions"
+        if root == (".claude", "rules"):
+            return f"Claude Rule: {path.stem}"
+        if root == (".cursor", "rules"):
+            return f"Cursor Rule: {path.stem}"
+        if root == (".github", "instructions"):
+            instruction_name = path.name.removesuffix(".instructions.md")
+            return f"Copilot Instruction: {instruction_name}"
+    return path.name
 
 
 def _influence(
@@ -35,8 +99,25 @@ def _influence(
 
     Returns (connect, confidence, evidence) or None when there is no edge.
     """
+    rel = _relative_parts(source, workspace)
+    path_targets = _path_targets(source, rel)
+    if path_targets is not None:
+        targets, evidence_kind = path_targets
+        if agent.name not in targets:
+            return None
+        evidence = f"{evidence_kind}:{'/'.join(rel or ())}"
+        if source.source_kind == "Skill":
+            evidence += "; available skill, invocation unverified"
+        return True, "suspected", evidence
+
+    if source.source_kind == "Skill":
+        return (
+            True,
+            "suspected",
+            f"skill:{source.source_scope or 'user'}; available skill, invocation unverified",
+        )
+
     if source.source_kind == "AgentInstruction":
-        rel = _relative_parts(source, workspace)
         if rel == (".github", "copilot-instructions.md"):
             if agent.name == "vscode-copilot":
                 return True, "confirmed", "instruction:.github/copilot-instructions.md"
@@ -51,7 +132,9 @@ def _influence(
                 ("CLAUDE.md",), (".claude", "CLAUDE.md")
             }:
                 return True, "confirmed", f"instruction:{'/'.join(rel)}"
-            return True, "suspected", f"instruction:{source.name}"
+            if agent.name == "claude-code":
+                return True, "suspected", f"instruction:{source.name}"
+            return None
         if source.name == "AGENTS.md" and agent.name == "vscode-copilot":
             # Root AGENTS.md is always-on in VS Code; nested support is
             # optional/experimental and therefore remains suspected.
@@ -62,30 +145,28 @@ def _influence(
                 return None
             confidence = "confirmed" if rel in {("AGENTS.md",), ("AGENTS.override.md",)} else "suspected"
             return True, confidence, f"instruction:{source.name}; presence only, actual loading unverified"
-        targets = _INSTRUCTION_TARGETS.get(source.name)
-        if targets is None:
-            # Unmapped instruction file (AGENTS.md, SYSTEM_PROMPT.md): commonly
-            # read across tools, but not guaranteed for this agent — a guess.
-            return True, "suspected", f"instruction:{source.name}"
-        if agent.name in targets:
+        if source.name == "AGENTS.md":
+            return None
+        instruction_targets = _INSTRUCTION_TARGETS.get(source.name)
+        if instruction_targets is None:
+            return None
+        if agent.name in instruction_targets:
             return True, "confirmed", f"instruction:{source.name}"
         return None
-    # DocFile and other passive docs: the agent *may* read it (search, RAG,
+    # Other passive docs: the agent *may* read it (search, RAG,
     # manual reference), so the influence is a guess, not a fact.
     return True, "suspected", f"doc-file:{source.source_kind}"
 
 
 def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResult:
     result = CollectionResult()
-
-    if scope == "global":
-        return result
-
-    raw = find_source_files(workspace)
     seen: set[str] = set()
+
+    raw = find_source_files(workspace) if scope in {"workspace", "all"} else []
 
     for path_str, kind in raw:
         fpath = Path(path_str)
+        metadata = skill_info(fpath, "project", "project") if kind == "Skill" else None
         git = inspect_source(fpath)
         repository_asset_id = ""
         if git.repository_path:
@@ -95,10 +176,13 @@ def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResu
                 path=git.repository_path,
             ).objectid
         source = Source(
-            name=fpath.name,
+            name=f"Skill: {metadata.name}" if metadata else _source_name(fpath, kind, workspace),
             source_kind=kind,
             path=path_str,
             is_external=False,
+            description=metadata.description if metadata else "",
+            source_scope=metadata.scope if metadata else "",
+            discovery_status="available" if metadata else "",
             git_repository_asset_id=repository_asset_id,
             git_relative_path=git.relative_path,
             git_committed=git.committed,
@@ -116,5 +200,33 @@ def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResu
                 kind="Influences",
                 properties={"confidence": confidence, "evidence": evidence},
             ))
+
+    if scope in {"global", "all"}:
+        for metadata in find_user_skills(agent.name):
+            source = Source(
+                name=f"Skill: {metadata.name}",
+                source_kind="Skill",
+                path=str(metadata.path),
+                is_external=True,
+                description=metadata.description,
+                source_scope=metadata.scope,
+                discovery_status="available",
+            )
+            if source.objectid in seen:
+                continue
+            result.sources.append(source)
+            seen.add(source.objectid)
+            decision = _influence(source, agent, workspace)
+            if decision is not None:
+                _, confidence, evidence = decision
+                result.edges.append(Edge(
+                    start=source.objectid,
+                    end=agent.objectid,
+                    kind="Influences",
+                    properties={
+                        "confidence": confidence,
+                        "evidence": f"{evidence}; origin:{metadata.origin}",
+                    },
+                ))
 
     return result

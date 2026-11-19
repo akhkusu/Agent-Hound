@@ -13,6 +13,8 @@ SourceKind = Literal[
     "DocFile",
     "SlackThread",
     "Skill",
+    "PromptFile",
+    "AgentDefinition",
     "AgentInstruction",
     "MCPResource",
     "MCPPrompt",
@@ -84,6 +86,7 @@ class Source(BaseModel):
     git_committed: bool = False
     git_clean: bool = False
     description: str = ""
+    source_scope: str = ""
     mime_type: str = ""
     mcp_server: str = ""
     arguments: tuple[str, ...] = ()
@@ -113,6 +116,8 @@ class Source(BaseModel):
             )
         if self.description:
             properties["description"] = self.description
+        if self.source_scope:
+            properties["source_scope"] = self.source_scope
         if self.mime_type:
             properties["mime_type"] = self.mime_type
         if self.mcp_server:
