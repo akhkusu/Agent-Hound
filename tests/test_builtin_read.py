@@ -114,8 +114,13 @@ def test_cli_real_graph(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ['scan', '--config', str(config), '--workspace', str(workspace), '--scope', 'workspace', '-o', str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())['graph']
-    assert len(graph['nodes']) == 5
-    assert [e['kind'] for e in graph['edges']].count('Influences') == 2
+    assert len(graph['nodes']) == 6
+    assert [e['kind'] for e in graph['edges']].count('Influences') == 3
+    config_source = next(node for node in graph['nodes']
+                         if node['properties'].get('source_kind') == 'RuntimeConfiguration')
+    assert config_source['properties']['path'] == str(config)
+    assert config_source['properties']['influence_channel'] == 'runtime_configuration'
+    assert config_source['properties']['content_exported'] is False
     edge = next(e for e in graph['edges'] if e['kind'] == 'CanAccess')
     assert edge['properties']['confidence'] == 'suspected'
     assert 'preapproval:Read' in edge['properties']['evidence']

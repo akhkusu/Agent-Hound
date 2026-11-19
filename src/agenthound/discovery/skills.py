@@ -6,6 +6,8 @@ from dataclasses import dataclass
 import os
 from pathlib import Path
 
+from agenthound.discovery.behavior_files import read_text, safe_file
+
 
 _MAX_MANIFEST_BYTES = 64 * 1024
 _MAX_NAME_LENGTH = 200
@@ -38,14 +40,10 @@ def _clean_scalar(value: str, limit: int) -> str:
 
 def _frontmatter_metadata(path: Path) -> tuple[str, str]:
     """Read only name/description from bounded, simple YAML front matter."""
-    try:
-        with path.open("rb") as manifest:
-            raw = manifest.read(_MAX_MANIFEST_BYTES + 1)
-    except OSError:
+    text = read_text(path, path.parent)
+    if text is None:
         return path.parent.name, ""
-    if len(raw) > _MAX_MANIFEST_BYTES:
-        raw = raw[:_MAX_MANIFEST_BYTES]
-    lines = raw.decode("utf-8", errors="replace").splitlines()
+    lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
         return path.parent.name, ""
     try:
@@ -104,6 +102,8 @@ def _skill_manifests(root: Path, origin: str) -> list[SkillInfo]:
             if filename.lower() != "skill.md":
                 continue
             path = Path(directory) / filename
+            if not safe_file(path, root):
+                continue
             try:
                 relative = path.relative_to(root)
             except ValueError:

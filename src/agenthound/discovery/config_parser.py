@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import re
@@ -10,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from agenthound.discovery.behavior_files import read_json, read_jsonc
 from agenthound.discovery.builtin_read import read_capability
 from agenthound.discovery.builtin_bash import bash_capability
 from agenthound.discovery.claude_mcp import claude_mcp_paths, mcp_capabilities
@@ -83,17 +83,28 @@ def discover_config_files(workspace: Path | None = None) -> list[Path]:
     """Return paths of all agent config files found on this system."""
     found: list[Path] = []
     seen: set[Path] = set()
+    workspace = (workspace or Path.cwd()).absolute()
+    copilot_home = Path(os.environ.get("COPILOT_HOME", str(Path.home() / ".copilot"))).expanduser()
     candidates = [path for path, hint in _DISCOVERY_CANDIDATES if hint != "claude-code"]
     candidates.extend(claude_settings_paths(workspace or Path.cwd()))
     candidates.extend(claude_mcp_paths(workspace or Path.cwd()))
     from agenthound.discovery.codex_settings import codex_config_paths
     candidates.extend(codex_config_paths(workspace or Path.cwd()))
+    candidates.extend([
+        workspace / ".cursor" / "mcp.json", workspace / ".vscode" / "mcp.json",
+        workspace / ".github" / "mcp.json",
+        workspace / ".github" / "copilot" / "settings.json",
+        workspace / ".github" / "copilot" / "settings.local.json",
+        copilot_home / "settings.json", copilot_home / "mcp-config.json",
+    ])
+    from agenthound.discovery.behavior_files import safe_file
     for path in candidates:
         try:
             resolved = path.resolve()
-        except OSError:
+        except (OSError, RuntimeError):
             continue
-        if resolved not in seen and path.is_file():
+        boundary = workspace if path.absolute().is_relative_to(workspace) else path.parent
+        if resolved not in seen and safe_file(path, boundary):
             found.append(path)
             seen.add(resolved)
     return found
@@ -103,7 +114,15 @@ def _detect_agent(config_path: Path) -> tuple[str, str]:
     """Return (name, platform) for a config file path."""
     path_str = str(config_path)
     name = config_path.name
-    if (config_path.parent.name == ".codex" and name == "config.toml") or name == "codex_config.toml":
+    copilot_home = Path(os.environ.get("COPILOT_HOME", str(Path.home() / ".copilot"))).expanduser()
+    if ((config_path.parent == copilot_home or config_path.parent.name == ".copilot")
+            and name in {"settings.json", "mcp-config.json"}) or (
+            config_path.parent.name == "copilot" and config_path.parent.parent.name == ".github"
+            and name in {"settings.json", "settings.local.json"}) or (
+            config_path.parent.name == ".github" and name == "mcp.json"):
+        return "copilot-cli", "GitHub Copilot CLI"
+    codex_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser()
+    if (name == "config.toml" and (config_path.parent.name == ".codex" or config_path.absolute().parent == codex_home.absolute())) or name == "codex_config.toml":
         return "codex", "Codex"
     if name in {".claude.json", ".mcp.json"}:
         return "claude-code", "Claude Code"
@@ -119,7 +138,8 @@ def _detect_agent(config_path: Path) -> tuple[str, str]:
     if "windsurf_mcp" in name:
         return "windsurf", "Windsurf"
     # Fall back to path heuristics for standard install locations
-    if config_path.parent.name == ".claude" and name in {"settings.json", "settings.local.json"}:
+    claude_home = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude"))).expanduser()
+    if (config_path.parent.name == ".claude" or config_path.absolute().parent == claude_home.absolute()) and name in {"settings.json", "settings.local.json"}:
         return "claude-code", "Claude Code"
     if ".vscode" in path_str:
         return "vscode-copilot", "VS Code Copilot"
@@ -131,6 +151,20 @@ def _detect_agent(config_path: Path) -> tuple[str, str]:
 
 
 def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -> Capability:
+    """Validate static MCP metadata without exposing malformed secret values."""
+    if not isinstance(config, dict):
+        raise ValueError("MCP server definition must be an object")
+    if not isinstance(config.get("command", ""), str) or not isinstance(config.get("args", []), list):
+        raise ValueError("MCP command must be a string and args must be a list")
+    if config.get("url") is not None and not isinstance(config["url"], str):
+        raise ValueError("MCP endpoint must be a string")
+    try:
+        return _build_mcp_capability_data(name, config, agent_scope)
+    except (ValueError, TypeError, AttributeError, KeyError, OverflowError):
+        raise ValueError("MCP server contains invalid configuration metadata") from None
+
+
+def _build_mcp_capability_data(name: str, config: dict[str, Any], agent_scope: str) -> Capability:
     """Derive capability flags in three layers, most reliable first.
 
     1. Known package profile (confirmed) — the package identity is a fact
@@ -149,6 +183,9 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
         # Arguments frequently contain credentials. Export only the launcher;
         # package identity and safe scope details have dedicated properties.
         cmd_str = os.path.basename(command.replace("\\", "/"))
+        if any(char.isspace() for char in cmd_str):
+            # A command string containing arguments is not a safe launcher label.
+            cmd_str = None
 
     fields: dict[str, Any] = {}
 
@@ -182,7 +219,7 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
         # are data — a "/home/git/cache" arg must not imply git_write.
         identities = identity_tokens(command, args)
         tokens = _tokenize(name, *identities)
-        if identities:
+        if identities and re.fullmatch(r"(?:@[\w.-]+/)?[\w.-]+(?:@[\w.^~+-]+)?", identities[-1]):
             fields["package_name"] = identities[-1]
         if shell_hits := _SHELL_TOKENS & tokens:
             fields["shell_exec"] = "suspected"
@@ -257,6 +294,8 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
 
 
 def _parse_mcp_servers(servers_dict: dict[str, Any], agent_scope: str) -> list[Capability]:
+    if not isinstance(servers_dict, dict):
+        raise ValueError("MCP servers must be an object")
     return [
         _build_mcp_capability(name, config, agent_scope)
         for name, config in servers_dict.items()
@@ -264,18 +303,31 @@ def _parse_mcp_servers(servers_dict: dict[str, Any], agent_scope: str) -> list[C
 
 
 def _parse_hooks(hooks_dict: dict[str, Any], agent_scope: str) -> list[Capability]:
+    if not isinstance(hooks_dict, dict):
+        raise ValueError("Hook definitions must be an object")
     caps: list[Capability] = []
     for event, hook_groups in hooks_dict.items():
         if not isinstance(hook_groups, list):
             continue
         for group in hook_groups:
+            if not isinstance(group, dict):
+                raise ValueError("Hook matcher groups must be objects")
             matcher = group.get("matcher", event)
-            for hook in group.get("hooks", []):
+            handlers = group.get("hooks", [])
+            if not isinstance(handlers, list):
+                raise ValueError("Hook handlers must be a list")
+            for hook in handlers:
+                if not isinstance(hook, dict):
+                    raise ValueError("Hook handlers must be objects")
                 if hook.get("type") == "command":
+                    if not isinstance(hook.get("command"), str):
+                        raise ValueError("Hook command must be a string")
                     caps.append(Capability(
                         name=f"hook:{event}:{matcher}",
                         cap_kind="ShellHook",
-                        command=hook.get("command"),
+                        # Hook commands may contain credentials and inline script
+                        # bodies. Presence is modeled without exporting any text.
+                        command=None,
                         agent_scope=agent_scope,
                         shell_evidence=f"hook:{event}; fixed command handler, not an agent-controlled shell tool",
                     ))
@@ -287,16 +339,17 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
     if config_path.suffix == ".toml" and _detect_agent(config_path)[0] == "codex":
         from agenthound.discovery.codex_settings import collect_codex_settings
         return collect_codex_settings([config_path], config_path.parent.parent)
-    try:
-        with open(config_path, encoding="utf-8-sig") as f:
-            raw: dict[str, Any] = json.load(f)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Cannot parse config {config_path}: {exc}") from exc
+    reader = read_jsonc if _detect_agent(config_path)[0] in {"vscode-copilot", "copilot-cli"} else read_json
+    raw = reader(config_path, config_path.parent)
+    if raw is None:
+        raise ValueError(f"Cannot parse config {config_path}: expected a readable JSON object of at most 64 KiB")
 
     if config_path.name in {".claude.json", ".mcp.json"}:
         agent = Agent(name="claude-code", platform="Claude Code", config_path=str(config_path))
         # Explicit -c is single-file: nested project state is not guessed.
         servers = raw.get("mcpServers", {})
+        if not isinstance(servers, dict):
+            raise ValueError("MCP servers must be an object")
         scope = "user" if config_path.name == ".claude.json" else "project"
         caps = mcp_capabilities(agent, {name: (server, config_path, scope) for name, server in servers.items()})
         builtin = read_capability(agent, {})
@@ -322,6 +375,8 @@ def parse_config_data(config_path: Path, raw: dict[str, Any], agent: Agent | Non
     if not servers:
         servers = raw.get("servers", {})
     if not servers and "mcp" in raw:
+        if not isinstance(raw["mcp"], dict):
+            raise ValueError("MCP configuration must be an object")
         servers = raw["mcp"].get("servers", {})
     mcp_caps = _parse_mcp_servers(servers, agent_scope)
     mcp_evidence = "MCP configuration observed; runtime connection and advertised features unverified"

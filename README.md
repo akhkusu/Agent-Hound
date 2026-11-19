@@ -56,11 +56,10 @@ agenthound --help
 ### Scan a Project
 
 ```bash
-agenthound doctor /path/to/project
 agenthound scan /path/to/project -o output.json
 ```
 
-`doctor` checks local setup; `scan` writes a BloodHound OpenGraph file. Omit the project path to use the current directory. See the [CLI guide](docs/cli.md) for collection options and advanced commands.
+`scan` writes a BloodHound OpenGraph file. Omit the project path to use the current directory. See the [CLI guide](docs/cli.md) for collection options and advanced commands.
 
 ### Import into BloodHound
 

@@ -1,9 +1,8 @@
 # Using the CLI
 
-The two main commands are `scan` and `doctor`. Both accept an optional project path; omitting it uses the current directory.
+`scan` accepts an optional project path; omitting it uses the current directory.
 
 ```bash
-agenthound doctor ./my-project
 agenthound scan ./my-project -o graph.json
 ```
 
@@ -11,9 +10,9 @@ agenthound scan ./my-project -o graph.json
 
 Use `-w`/`--workspace` on `scan` as an alternative to the positional project path. Supply one or the other, rather than both.
 
-## Check the setup
+## Troubleshooting
 
-`doctor` checks local configuration and reports `OK`, `WARNING`, or `ERROR` with suggested next steps. It does not create a graph, launch MCP servers, authenticate to cloud services, or perform network checks. It cannot verify live server availability or cloud permissions. Errors return exit code 1; warnings alone return 0.
+If a scan fails or a feature is unavailable, optionally run `agenthound doctor ./my-project`. It checks local configuration and reports `OK`, `WARNING`, or `ERROR` with suggested next steps. It does not create a graph, launch MCP servers, authenticate to cloud services, or perform network checks. It cannot verify live server availability or cloud permissions. Errors return exit code 1; warnings alone return 0.
 
 To check or scan one configuration without merging user, project, and local settings:
 
@@ -35,6 +34,8 @@ agenthound scan ./my-project --scope workspace
 Project and user `SKILL.md` files available to Claude Code and Codex are included as potential prompt sources. Agent-Hound exports skill metadata and paths, not instruction bodies.
 
 Normal scans may check internet connectivity when capabilities are found. MCP servers are read from configuration without being started or contacted. Live MCP collection requires `--discover-mcp`; live Microsoft 365 collection requires `--m365`.
+
+See [behavior source discovery](source-discovery.md) for supported paths, loading conditions, and privacy protections.
 
 ## Live MCP metadata
 

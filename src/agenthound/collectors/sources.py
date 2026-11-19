@@ -1,232 +1,135 @@
-"""Collect Source nodes and Influences edges from the workspace."""
+"""Collect metadata-only Source nodes and correctly scoped Influences edges."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from agenthound.collectors.base import CollectionResult
-from agenthound.discovery.git_metadata import inspect_source
-from agenthound.discovery.skills import find_user_skills, skill_info
+from agenthound.discovery.behavior_files import BehaviorFile, DiscoveryContext, read_text, safe_file
+from agenthound.discovery.git_metadata import SourceMetadata, inspect_source
+from agenthound.discovery import skills
+from agenthound.discovery.source_registry import PLATFORM_NAMES, discover_behavior_files, matching_rule
 from agenthound.discovery.workspace import find_source_files
 from agenthound.models.edges import Edge
-from agenthound.models.nodes import Agent, Asset, Source
-
-# Instruction files a specific agent reads automatically. A file mapped here
-# only influences its matching agents (confirmed); an unmapped instruction
-# file (AGENTS.md, SYSTEM_PROMPT.md) is a cross-tool convention read by any
-# agent. This stops e.g. .cursorrules from being shown as influencing Claude.
-_INSTRUCTION_TARGETS: dict[str, set[str]] = {
-    ".cursorrules": {"cursor"},
-    "GEMINI.md": {"gemini"},
-    "AGENTS.override.md": {"codex"},
-}
+from agenthound.models.nodes import Agent, Asset, Source, SourceKind
 
 
-def _path_targets(
-    source: Source, rel: tuple[str, ...] | None
-) -> tuple[set[str], str] | None:
-    if rel is None or len(rel) < 3:
-        return None
-    root: tuple[str, str] = (rel[0], rel[1])
-    if source.source_kind == "Skill":
-        targets = {
-            (".agents", "skills"): {"codex", "vscode-copilot"},
-            (".claude", "skills"): {"claude-code", "vscode-copilot"},
-            (".github", "skills"): {"vscode-copilot"},
-        }.get(root)
-        return (targets, "skill") if targets else None
-    if source.source_kind == "PromptFile":
-        targets = {
-            (".claude", "commands"): {"claude-code"},
-            (".github", "prompts"): {"vscode-copilot"},
-        }.get(root)
-        return (targets, "prompt") if targets else None
-    if source.source_kind == "AgentDefinition":
-        targets = {
-            (".claude", "agents"): {"claude-code"},
-            (".github", "agents"): {"vscode-copilot"},
-        }.get(root)
-        return (targets, "agent-definition") if targets else None
-    if source.source_kind == "AgentInstruction":
-        targets = {
-            (".claude", "rules"): {"claude-code"},
-            (".cursor", "rules"): {"cursor"},
-            (".github", "instructions"): {"vscode-copilot"},
-        }.get(root)
-        return (targets, "instruction") if targets else None
-    return None
-
-
-def _relative_parts(source: Source, workspace: Path) -> tuple[str, ...] | None:
-    try:
-        return Path(source.path).resolve().relative_to(workspace.resolve()).parts
-    except (OSError, ValueError):
-        return None
-
-
-def _source_name(path: Path, kind: str, workspace: Path) -> str:
+def _source_name(path: Path, kind: str, workspace: Path, platform: str = "") -> str:
+    """Keep established display names; naming does not determine applicability."""
     try:
         rel = path.resolve().relative_to(workspace.resolve()).parts
     except (OSError, ValueError):
         rel = ()
     root = rel[:2]
+    label = {"Claude Code": "Claude", "Codex": "Codex", "GitHub Copilot": "Copilot", "Cursor": "Cursor"}.get(platform, "Custom")
     if kind == "Skill":
         return f"Skill: {path.parent.name}"
     if kind == "PromptFile":
-        prompt_name = path.name.removesuffix(".prompt.md").removesuffix(".md")
-        prefix = "Claude Command" if root == (".claude", "commands") else "Copilot Prompt"
-        return f"{prefix}: {prompt_name}"
+        short = path.name.removesuffix(".prompt.md").removesuffix(".md")
+        prefix = "Claude Command" if label == "Claude" else f"{label} Prompt"
+        return f"{prefix}: {short}"
     if kind == "AgentDefinition":
-        prefix = "Claude Agent" if root == (".claude", "agents") else "Copilot Agent"
-        return f"{prefix}: {path.stem}"
+        prefix = f"{label} Agent"
+        return f"{prefix}: {path.stem.removesuffix('.agent')}"
     if kind == "AgentInstruction":
         if rel == (".github", "copilot-instructions.md"):
             return "Copilot Instructions"
-        if root == (".claude", "rules"):
-            return f"Claude Rule: {path.stem}"
-        if root == (".cursor", "rules"):
-            return f"Cursor Rule: {path.stem}"
-        if root == (".github", "instructions"):
-            instruction_name = path.name.removesuffix(".instructions.md")
-            return f"Copilot Instruction: {instruction_name}"
+        prefixes = {(".claude", "rules"): "Claude Rule", (".cursor", "rules"): "Cursor Rule",
+                    (".github", "instructions"): "Copilot Instruction"}
+        if root in prefixes:
+            return f"{prefixes[root]}: {path.stem.removesuffix('.instructions')}"
     return path.name
 
 
-def _influence(
-    source: Source, agent: Agent, workspace: Path
-) -> tuple[bool, str, str] | None:
-    """Decide whether `source` influences `agent`, with confidence/evidence.
-
-    Returns (connect, confidence, evidence) or None when there is no edge.
-    """
-    rel = _relative_parts(source, workspace)
-    path_targets = _path_targets(source, rel)
-    if path_targets is not None:
-        targets, evidence_kind = path_targets
-        if agent.name not in targets:
-            return None
-        evidence = f"{evidence_kind}:{'/'.join(rel or ())}"
-        if source.source_kind == "Skill":
-            evidence += "; available skill, invocation unverified"
-        return True, "suspected", evidence
-
-    if source.source_kind == "Skill":
-        return (
-            True,
-            "suspected",
-            f"skill:{source.source_scope or 'user'}; available skill, invocation unverified",
-        )
-
-    if source.source_kind == "AgentInstruction":
-        if rel == (".github", "copilot-instructions.md"):
-            if agent.name == "vscode-copilot":
-                return True, "confirmed", "instruction:.github/copilot-instructions.md"
-            return None
-        if source.name == "CLAUDE.md":
-            # Claude Code loads the project-root file automatically; nested
-            # files are loaded only when it works in that subtree. VS Code
-            # supports the root and .claude compatibility locations.
-            if agent.name == "claude-code" and rel == ("CLAUDE.md",):
-                return True, "confirmed", "instruction:CLAUDE.md"
-            if agent.name == "vscode-copilot" and rel in {
-                ("CLAUDE.md",), (".claude", "CLAUDE.md")
-            }:
-                return True, "confirmed", f"instruction:{'/'.join(rel)}"
-            if agent.name == "claude-code":
-                return True, "suspected", f"instruction:{source.name}"
-            return None
-        if source.name == "AGENTS.md" and agent.name == "vscode-copilot":
-            # Root AGENTS.md is always-on in VS Code; nested support is
-            # optional/experimental and therefore remains suspected.
-            confidence = "confirmed" if rel == ("AGENTS.md",) else "suspected"
-            return True, confidence, f"instruction:{source.name}"
-        if source.name in {"AGENTS.md", "AGENTS.override.md"} and agent.name == "codex":
-            if source.name == "AGENTS.md" and (Path(source.path).parent / "AGENTS.override.md").is_file():
-                return None
-            confidence = "confirmed" if rel in {("AGENTS.md",), ("AGENTS.override.md",)} else "suspected"
-            return True, confidence, f"instruction:{source.name}; presence only, actual loading unverified"
-        if source.name == "AGENTS.md":
-            return None
-        instruction_targets = _INSTRUCTION_TARGETS.get(source.name)
-        if instruction_targets is None:
-            return None
-        if agent.name in instruction_targets:
-            return True, "confirmed", f"instruction:{source.name}"
-        return None
-    # Other passive docs: the agent *may* read it (search, RAG,
-    # manual reference), so the influence is a guess, not a fact.
-    return True, "suspected", f"doc-file:{source.source_kind}"
+def collect_sources(agent: Agent, workspace: Path, scope: str,
+                    include_plugin_cache: bool = False) -> CollectionResult:
+    return collect_sources_for_agents([agent], workspace, scope, include_plugin_cache)
 
 
-def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResult:
+def collect_sources_for_agents(agents: list[Agent], workspace: Path, scope: str,
+                               include_plugin_cache: bool = False) -> CollectionResult:
+    """Discover a workspace once and share metadata across owning agents."""
     result = CollectionResult()
-    seen: set[str] = set()
+    if not agents:
+        return result
+    workspace = workspace.resolve()
+    context = DiscoveryContext(workspace, skills._user_home(), scope, include_plugin_cache)
+    observations = {agent.objectid: discover_behavior_files(context, agent.name) for agent in agents}
+    nodes: dict[tuple[Path, str], Source] = {}
+    git_cache: dict[Path, SourceMetadata] = {}
 
-    raw = find_source_files(workspace) if scope in {"workspace", "all"} else []
-
-    for path_str, kind in raw:
-        fpath = Path(path_str)
-        metadata = skill_info(fpath, "project", "project") if kind == "Skill" else None
-        git = inspect_source(fpath)
-        repository_asset_id = ""
-        if git.repository_path:
-            repository_asset_id = Asset(
-                name=Path(git.repository_path).name,
-                asset_kind="SourceCode",
-                path=git.repository_path,
-            ).objectid
+    def add_source(path: Path, kind: SourceKind, candidate: BehaviorFile | None = None) -> Source:
+        key = (path.resolve(), kind)
+        if key in nodes:
+            return nodes[key]
+        rule = candidate.rule if candidate else matching_rule(path, workspace)
+        source_scope = (candidate.scope or candidate.rule.scope) if candidate else "project"
+        metadata = skills.skill_info(path, source_scope, candidate.origin if candidate else "project") if kind == "Skill" else None
+        if source_scope == "project" and path not in git_cache:
+            git_cache[path] = inspect_source(path)
+        git = git_cache.get(path, SourceMetadata())
+        repository_id = Asset(name=Path(git.repository_path).name, asset_kind="SourceCode", path=git.repository_path).objectid if git.repository_path else ""
         source = Source(
-            name=f"Skill: {metadata.name}" if metadata else _source_name(fpath, kind, workspace),
-            source_kind=kind,
-            path=path_str,
-            is_external=False,
-            description=metadata.description if metadata else "",
-            source_scope=metadata.scope if metadata else "",
-            discovery_status="available" if metadata else "",
-            git_repository_asset_id=repository_asset_id,
-            git_relative_path=git.relative_path,
-            git_committed=git.committed,
-            git_clean=git.clean,
+            name=f"Skill: {metadata.name}" if metadata else (candidate.name if candidate and candidate.name else _source_name(path, kind, workspace, rule.platform if rule else "")),
+            source_kind=kind, path=str(path), is_external=source_scope != "project",
+            source_scope=source_scope, description=metadata.description if metadata else "",
+            discovery_status=candidate.discovery_status if candidate else ("available" if rule is None else "unlinked"),
+            platform=rule.platform if rule else "Generic",
+            origin=candidate.origin if candidate and candidate.origin else (rule.root if rule else "workspace"),
+            influence_channel=(rule.influence_channel if rule else "prompt_context"),
+            activation=(candidate.activation or candidate.rule.activation) if candidate else ("unknown" if rule else "on_demand"),
+            precedence=candidate.precedence if candidate else 0,
+            target_pattern=candidate.target_pattern if candidate else "",
+            git_repository_asset_id=repository_id, git_relative_path=git.relative_path,
+            git_committed=git.committed, git_clean=git.clean,
         )
-        if source.objectid not in seen:
-            result.sources.append(source)
-            seen.add(source.objectid)
-        decision = _influence(source, agent, workspace)
-        if decision is not None:
-            _, confidence, evidence = decision
-            result.edges.append(Edge(
-                start=source.objectid,
-                end=agent.objectid,
-                kind="Influences",
-                properties={"confidence": confidence, "evidence": evidence},
-            ))
+        nodes[key] = source
+        return source
 
-    if scope in {"global", "all"}:
-        for metadata in find_user_skills(agent.name):
-            source = Source(
-                name=f"Skill: {metadata.name}",
-                source_kind="Skill",
-                path=str(metadata.path),
-                is_external=True,
-                description=metadata.description,
-                source_scope=metadata.scope,
-                discovery_status="available",
-            )
-            if source.objectid in seen:
+    # Retain general documents and orphan platform-specific Source nodes, but
+    # never infer an edge from classification alone.
+    raw = find_source_files(workspace) if context.allows("project") else []
+    specific_paths = {candidate.path.resolve() for candidates in observations.values() for candidate in candidates}
+    docs: list[Source] = []
+    for path_str, kind in raw:
+        path = Path(path_str)
+        if not safe_file(path, workspace) or path.resolve() in specific_paths:
+            continue
+        source = add_source(path, kind)
+        if kind == "DocFile":
+            docs.append(source)
+
+    for agent in agents:
+        for doc in docs:
+            result.edges.append(Edge(start=doc.objectid, end=agent.objectid, kind="Influences", properties={
+                "confidence": "suspected", "evidence": "Existing scoped document source; actual reading unverified",
+                "influence_channel": "prompt_context", "activation": "on_demand", "source_scope": "project",
+                "platform": PLATFORM_NAMES.get(agent.name, agent.platform), "content_exported": False,
+            }))
+        for candidate in observations[agent.objectid]:
+            source = add_source(candidate.path, cast(SourceKind, candidate.rule.source_kind), candidate)
+            activation = candidate.activation or candidate.rule.activation
+            confidence = candidate.confidence or candidate.rule.confidence
+            if activation in {"conditional", "on_demand", "session_resume", "unknown"}:
+                confidence = "suspected"
+            if candidate.discovery_status in {"overridden", "disabled", "out_of_scope"}:
                 continue
-            result.sources.append(source)
-            seen.add(source.objectid)
-            decision = _influence(source, agent, workspace)
-            if decision is not None:
-                _, confidence, evidence = decision
-                result.edges.append(Edge(
-                    start=source.objectid,
-                    end=agent.objectid,
-                    kind="Influences",
-                    properties={
-                        "confidence": confidence,
-                        "evidence": f"{evidence}; origin:{metadata.origin}",
-                    },
-                ))
+            properties: dict[str, str | int | bool] = {
+                "confidence": confidence, "evidence": candidate.evidence or candidate.rule.evidence,
+                "influence_channel": candidate.rule.influence_channel, "activation": activation,
+                "source_scope": candidate.scope or candidate.rule.scope, "platform": candidate.rule.platform,
+                "origin": candidate.origin or candidate.rule.root, "content_exported": False,
+                "precedence": candidate.precedence,
+            }
+            if activation == "on_demand":
+                properties["evidence"] = str(properties["evidence"]) + "; invocation unverified"
+            if candidate.target_pattern:
+                properties["target_pattern"] = candidate.target_pattern
+            if candidate.rule.metadata_parser and read_text(candidate.path, candidate.root) is None:
+                properties["confidence"] = "suspected"
+                properties["metadata_status"] = "unreadable_or_oversized"
+            result.edges.append(Edge(start=source.objectid, end=agent.objectid, kind="Influences", properties=properties))
 
+    result.sources = list(nodes.values())
     return result
