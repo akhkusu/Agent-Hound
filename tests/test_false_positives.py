@@ -25,7 +25,15 @@ def _git_repo_with_remote(tmp_path):
     repo.mkdir()
     subprocess.run(["git", "init", str(repo)], capture_output=True)
     subprocess.run(
-        ["git", "-C", str(repo), "remote", "add", "origin", "https://github.com/test/repo.git"],
+        [
+            "git",
+            "-C",
+            str(repo),
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/test/repo.git",
+        ],
         capture_output=True,
     )
     return repo
@@ -40,14 +48,19 @@ def test_fp1_filesystem_scoped_to_allowed_directory(tmp_path):
     (docs / ".env").write_text("SECRET=in-scope")
     ssh = tmp_path / ".ssh"
     ssh.mkdir()
-    (ssh / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n")
+    (ssh / "id_rsa").write_text(
+        "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n"
+    )
 
-    caps = _parse_servers(tmp_path, {
-        "filesystem": {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "filesystem": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+            },
         },
-    })
+    )
     result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
 
     reachable = {
@@ -67,12 +80,15 @@ def test_fp1_windows_npx_shim_keeps_filesystem_scope(tmp_path):
     ssh.mkdir()
     (ssh / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n")
 
-    caps = _parse_servers(tmp_path, {
-        "filesystem": {
-            "command": "npx.cmd",
-            "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "filesystem": {
+                "command": "npx.cmd",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+            },
         },
-    })
+    )
     result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
     reachable = {
         next(a.path for a in result.assets if a.objectid == e.end)
@@ -89,12 +105,15 @@ def test_fp1_windows_npx_shim_keeps_filesystem_scope(tmp_path):
 def test_fp2_profile_manager_gets_no_file_access(tmp_path):
     (tmp_path / ".env").write_text("SECRET=x")
 
-    caps = _parse_servers(tmp_path, {
-        "profile-manager": {
-            "command": "npx",
-            "args": ["-y", "user-profile-manager-mcp"],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "profile-manager": {
+                "command": "npx",
+                "args": ["-y", "user-profile-manager-mcp"],
+            },
         },
-    })
+    )
     result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
 
     assert [e for e in result.edges if e.kind == "CanAccess"] == []
@@ -104,12 +123,15 @@ def test_fp2_profile_manager_gets_no_file_access(tmp_path):
 
 
 def test_fp3_command_palette_is_not_shell(tmp_path):
-    caps = _parse_servers(tmp_path, {
-        "command-palette": {
-            "command": "npx",
-            "args": ["-y", "command-palette-mcp"],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "command-palette": {
+                "command": "npx",
+                "args": ["-y", "command-palette-mcp"],
+            },
         },
-    })
+    )
     result = collect_impact(capabilities=caps, internet_reachable=True)
 
     kinds = {i.impact_kind for i in result.impacts}
@@ -117,12 +139,15 @@ def test_fp3_command_palette_is_not_shell(tmp_path):
 
 
 def test_fp3_run_tasks_is_not_shell(tmp_path):
-    caps = _parse_servers(tmp_path, {
-        "run-tasks": {
-            "command": "npx",
-            "args": ["-y", "run-tasks-mcp"],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "run-tasks": {
+                "command": "npx",
+                "args": ["-y", "run-tasks-mcp"],
+            },
         },
-    })
+    )
     result = collect_impact(capabilities=caps, internet_reachable=True)
 
     kinds = {i.impact_kind for i in result.impacts}
@@ -133,13 +158,16 @@ def test_fp3_run_tasks_is_not_shell(tmp_path):
 
 
 def test_fp4a_remote_and_web_search_no_exfiltration(tmp_path):
-    caps = _parse_servers(tmp_path, {
-        "remote": {"url": "https://mcp.example.com/sse"},
-        "web-search": {
-            "command": "npx",
-            "args": ["-y", "web-search-mcp"],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "remote": {"url": "https://mcp.example.com/sse"},
+            "web-search": {
+                "command": "npx",
+                "args": ["-y", "web-search-mcp"],
+            },
         },
-    })
+    )
     result = collect_impact(capabilities=caps, internet_reachable=True)
 
     kinds = {i.impact_kind for i in result.impacts}
@@ -152,12 +180,15 @@ def test_fp4a_remote_and_web_search_no_exfiltration(tmp_path):
 def test_fp4b_unknown_github_named_server_no_supply_chain(tmp_path):
     repo = _git_repo_with_remote(tmp_path)
 
-    caps = _parse_servers(tmp_path, {
-        "github-issues-reader": {
-            "command": "npx",
-            "args": ["-y", "github-issues-reader-mcp"],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "github-issues-reader": {
+                "command": "npx",
+                "args": ["-y", "github-issues-reader-mcp"],
+            },
         },
-    })
+    )
     result = collect_impact(
         capabilities=caps, internet_reachable=True, source_repos=[str(repo)]
     )
@@ -166,33 +197,21 @@ def test_fp4b_unknown_github_named_server_no_supply_chain(tmp_path):
     assert "SupplyChainContamination" not in kinds
 
 
-# Contrast case: the official github server really can push (push_files /
-# create_or_update_file), so SupplyChain must still fire -- with the package
-# identity as the reason, not a substring hit.
-
-
-def test_known_github_package_still_triggers_supply_chain(tmp_path):
+def test_known_github_profile_does_not_prove_specific_repository_access(tmp_path):
     repo = _git_repo_with_remote(tmp_path)
-
-    caps = _parse_servers(tmp_path, {
-        "github": {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-github"],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "github": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-github"],
+            },
         },
-    })
-    result = collect_impact(
-        capabilities=caps, internet_reachable=True, source_repos=[str(repo)]
     )
-
-    kinds = {i.impact_kind for i in result.impacts}
-    assert "SupplyChainContamination" in kinds
-
-    supply_chain = next(
-        i for i in result.impacts if i.impact_kind == "SupplyChainContamination"
-    )
-    trigger = next(e for e in result.edges if e.end == supply_chain.objectid)
-    assert trigger.properties["confidence"] == "confirmed"
-    assert "package:@modelcontextprotocol/server-github" in trigger.properties["evidence"]
+    assert caps[0].git_write == "confirmed"  # implementation operation only
+    assert caps[0].effective_access_confidence == "none"
+    result = collect_impact(caps, internet_reachable=True, source_repos=[str(repo)])
+    assert not result.impacts
 
 
 # Guesses must be visually distinguishable from facts: every derived edge
@@ -204,12 +223,15 @@ def test_scoped_can_access_edge_is_suspected_with_evidence(tmp_path):
     docs.mkdir()
     (docs / ".env").write_text("SECRET=x")
 
-    caps = _parse_servers(tmp_path, {
-        "filesystem": {
-            "command": "npx",
-            "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "filesystem": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem", str(docs)],
+            },
         },
-    })
+    )
     result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
 
     edge = next(e for e in result.edges if e.kind == "CanAccess")
@@ -217,7 +239,9 @@ def test_scoped_can_access_edge_is_suspected_with_evidence(tmp_path):
     # scoped claim stays "suspected" even though the package is confirmed.
     assert edge.properties["confidence"] == "suspected"
     assert "scoped-by-args" in edge.properties["evidence"]
-    assert "package:@modelcontextprotocol/server-filesystem" in edge.properties["evidence"]
+    assert (
+        "package:@modelcontextprotocol/server-filesystem" in edge.properties["evidence"]
+    )
 
     og = edge.to_opengraph()
     assert og["properties"]["confidence"] == "suspected"
@@ -226,14 +250,17 @@ def test_scoped_can_access_edge_is_suspected_with_evidence(tmp_path):
 def test_keyword_fallback_edge_is_suspected(tmp_path):
     (tmp_path / ".env").write_text("SECRET=x")
 
-    caps = _parse_servers(tmp_path, {
-        "file-server": {
-            "command": "npx",
-            "args": ["-y", "some-unknown-file-server"],
+    caps = _parse_servers(
+        tmp_path,
+        {
+            "file-server": {
+                "command": "npx",
+                "args": ["-y", "some-unknown-file-server"],
+            },
         },
-    })
+    )
     result = collect_assets(capabilities=caps, workspace=tmp_path, scope="workspace")
 
-    edge = next(e for e in result.edges if e.kind == "CanAccess")
-    assert edge.properties["confidence"] == "suspected"
-    assert edge.properties["evidence"].startswith("keyword:")
+    # A keyword alone does not establish access to a particular host asset.
+    assert caps[0].file_access == "suspected"
+    assert not result.edges

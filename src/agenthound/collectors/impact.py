@@ -10,6 +10,7 @@ from agenthound.collectors.base import CollectionResult
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Capability, Impact
 
+
 def check_internet() -> bool:
     """Return True if an outbound TCP connection can be established."""
     try:
@@ -60,7 +61,9 @@ def _has_git_remote(repo_path: str) -> bool:
     try:
         result = subprocess.run(
             ["git", "-C", repo_path, "remote"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return bool(result.stdout.strip())
     except (subprocess.SubprocessError, OSError):
@@ -73,8 +76,21 @@ def collect_impact(
     source_repos: list[str] | None = None,
 ) -> CollectionResult:
     result = CollectionResult()
+    # Static implementation claims and tool advertisements do not establish
+    # effective access to a resource, execution success or current permission.
+    capabilities = [
+        c
+        for c in capabilities
+        if not (
+            c.cap_kind in {"MCPServer", "MCPTool"}
+            and c.discovery_status
+            and c.effective_access_confidence == "none"
+        )
+    ]
 
-    shell_caps = [c for c in capabilities if c.shell_exec != "none" and c.cap_kind != "ShellHook"]
+    shell_caps = [
+        c for c in capabilities if c.shell_exec != "none" and c.cap_kind != "ShellHook"
+    ]
     if shell_caps:
         impact = Impact(
             name="system-takeover",
@@ -84,10 +100,14 @@ def collect_impact(
         )
         result.impacts.append(impact)
         for cap in shell_caps:
-            result.edges.append(Edge(
-                start=cap.objectid, end=impact.objectid, kind="Triggers",
-                properties=_trigger_properties(cap.shell_exec, cap.shell_evidence),
-            ))
+            result.edges.append(
+                Edge(
+                    start=cap.objectid,
+                    end=impact.objectid,
+                    kind="Triggers",
+                    properties=_trigger_properties(cap.shell_exec, cap.shell_evidence),
+                )
+            )
 
     network_caps = [c for c in capabilities if c.network_send != "none"]
     if network_caps and internet_reachable:
@@ -99,17 +119,24 @@ def collect_impact(
         )
         result.impacts.append(impact)
         for cap in network_caps:
-            result.edges.append(Edge(
-                start=cap.objectid, end=impact.objectid, kind="Triggers",
-                properties=_trigger_properties(cap.network_send, cap.network_evidence),
-            ))
+            result.edges.append(
+                Edge(
+                    start=cap.objectid,
+                    end=impact.objectid,
+                    kind="Triggers",
+                    properties=_trigger_properties(
+                        cap.network_send, cap.network_evidence
+                    ),
+                )
+            )
 
     # SupplyChain fires only for git-write caps that can actually reach a
     # repo with a remote — a git server scoped to /tmp/scratch does not
     # contaminate an unrelated remote-backed repo elsewhere.
     repos_with_remote = [r for r in (source_repos or []) if _has_git_remote(r)]
     git_caps = [
-        c for c in capabilities
+        c
+        for c in capabilities
         if c.git_write != "none" and _git_reaches_repo(c, repos_with_remote)
     ]
     if git_caps and repos_with_remote:
@@ -121,9 +148,13 @@ def collect_impact(
         )
         result.impacts.append(impact)
         for cap in git_caps:
-            result.edges.append(Edge(
-                start=cap.objectid, end=impact.objectid, kind="Triggers",
-                properties=_trigger_properties(cap.git_write, cap.git_evidence),
-            ))
+            result.edges.append(
+                Edge(
+                    start=cap.objectid,
+                    end=impact.objectid,
+                    kind="Triggers",
+                    properties=_trigger_properties(cap.git_write, cap.git_evidence),
+                )
+            )
 
     return result
