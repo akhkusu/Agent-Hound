@@ -69,7 +69,7 @@ def test_codex_cli_export_omits_env_values(tmp_path):
     config.parent.mkdir()
     config.write_text('[mcp_servers.docs]\nurl = "https://example.com/mcp"\n[mcp_servers.docs.env]\nAPI_KEY = "never-export"\n[mcp_servers.filesystem]\ncommand = "npx"\nargs = ["-y", "@modelcontextprotocol/server-filesystem", "/demo", "--api-key", "never-export-arg"]\n')
     output = tmp_path / "output.json"
-    result = CliRunner().invoke(cli, ["-c", str(config), "-w", str(tmp_path), "--scope", "workspace", "-o", str(output)])
+    result = CliRunner().invoke(cli, ["scan", "-c", str(config), "-w", str(tmp_path), "--scope", "workspace", "-o", str(output)])
     assert result.exit_code == 0, result.output
     assert "never-export" not in output.read_text()
     assert "never-export-arg" not in output.read_text()

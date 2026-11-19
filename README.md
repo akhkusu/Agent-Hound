@@ -56,11 +56,11 @@ agenthound --help
 ### Scan a Project
 
 ```bash
-cd /path/to/project
-agenthound discover -o output.json -v
+agenthound doctor /path/to/project
+agenthound scan /path/to/project -o output.json
 ```
 
-`discover` scans supported agent configurations and writes a BloodHound OpenGraph file. Run `agenthound discover --help` for collection options.
+`doctor` checks local setup; `scan` writes a BloodHound OpenGraph file. Omit the project path to use the current directory. See the [CLI guide](docs/cli.md) for collection options and advanced commands.
 
 ### Import into BloodHound
 
@@ -73,7 +73,7 @@ Upload the generated JSON through **File Ingest** in **BloodHound CE** (v8.0+), 
 Agent-Hound can collect information from Microsoft 365 and Copilot environments and map which resources may influence Copilot and which resources the same account may be able to access, such as SharePoint documents.
 
 ```powershell
-agenthound discover --m365 -o combined_graph.json
+agenthound scan --m365 -o combined_graph.json
 ```
 
 `--m365` requires Windows and an existing authorized Copilot account.

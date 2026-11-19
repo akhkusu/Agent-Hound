@@ -4,9 +4,9 @@ Agent-Hound separates local application observations, cloud permissions, and evi
 
 ## Unified collection
 
-Use `agenthound discover --m365 -o combined_graph.json` to include local agents, Copilot observations and live SharePoint file metadata in one export. Use `--site-url` to scope cloud enumeration and `--limit` to change the default 20 retained files. Authentication remains opt-in through `--m365`.
+Use `agenthound scan --m365 -o combined_graph.json` to include local agents, Copilot observations and live SharePoint file metadata in one export. Use `--site-url` to scope cloud enumeration and `--limit` to change the default 20 retained files. Authentication remains opt-in through `--m365`.
 
-Use `agenthound discover --m365-snapshot examples/m365_snapshot.json -o combined_graph.json` to combine local observations with existing ACL/retrieval evidence without cloud requests. Each document is displayed by its original filename in the graph and terminal Attack Paths preview. The example is synthetic.
+Use `agenthound scan --m365-snapshot examples/m365_snapshot.json -o combined_graph.json` to combine local observations with existing ACL/retrieval evidence without cloud requests. Each document is displayed by its original filename in the graph and terminal Attack Paths preview. The example is synthetic.
 
 The commands below remain focused inventory/import tools for compatibility and troubleshooting.
 
@@ -76,7 +76,7 @@ For example, pasting a SharePoint link into Copilot can resolve the file into ch
 
 Documents use one node with both Source and Asset kinds. IDs are tenant scoped and based on resource IDs, so file rename does not replace the node. No M365-specific node or edge kinds are added. Principals, memberships and ACLs are used internally to compute the bound user's positive read reachability. `effective_principal` and `identity_evidence` remain on the Agent; `acl_evidence` and `acl_observed_at` preserve matching grant evidence on each `CanAccess` edge.
 
-Live `discover --m365` output uses the same complete candidate chain as local agents: `Source → Influences → Agent → HasCapability → Capability → CanAccess → Asset`. A retained document has both Source and Asset kinds. The Copilot node models the observed work-account context; its document-context capability, access and influence edges are suspected. They carry `requires_explicit_document_context: true`, `access_basis: copilot_document_context_candidate`, `metadata_access_verified: true`, and `retrieval_verified: false`. This models the possibility of explicitly supplying an available document, not a claim that Copilot has already consumed it or can browse autonomously. A confirmed REST download is separate evidence of account-level content access.
+Live `scan --m365` output uses the same complete candidate chain as local agents: `Source → Influences → Agent → HasCapability → Capability → CanAccess → Asset`. A retained document has both Source and Asset kinds. The Copilot node models the observed work-account context; its document-context capability, access and influence edges are suspected. They carry `requires_explicit_document_context: true`, `access_basis: copilot_document_context_candidate`, `metadata_access_verified: true`, and `retrieval_verified: false`. This models the possibility of explicitly supplying an available document, not a claim that Copilot has already consumed it or can browse autonomously. A confirmed REST download is separate evidence of account-level content access.
 
 The default document inventory includes visible content libraries such as Documents and Site Pages. It excludes hidden libraries and the infrastructure URL roots `_catalogs`, `FormServerTemplates`, `IWConvertedForms` and `Style Library`; it also skips the reserved `Forms` folder at each library root. A business library may have any title or file extension. `site_url`, `library` and `library_title` on document nodes retain its site/library context. Local desktop observations are not joined to cloud contexts by display name. Only retained file metadata becomes nodes; enumeration counts do not create unseen document nodes.
 

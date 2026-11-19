@@ -68,7 +68,7 @@ def test_cli_persists_runtime_evidence(tmp_path, monkeypatch):
     config.write_text("{}")
     output = tmp_path / "graph.json"
     monkeypatch.setattr("agenthound.cli.observe_claude_pid", lambda pid: RuntimeIdentity(pid, "S-1-5-21-1-2-3-1104", "2026-10-05T00:00:00+00:00"))
-    result = CliRunner().invoke(cli, ["-c", str(config), "-w", str(tmp_path), "--claude-pid", "21088", "-o", str(output)])
+    result = CliRunner().invoke(cli, ["scan", "-c", str(config), "-w", str(tmp_path), "--claude-pid", "21088", "-o", str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())["graph"]
     agent = next(node for node in graph["nodes"] if "Agent" in node["kinds"])
@@ -84,7 +84,7 @@ def test_cli_does_not_attach_pid_to_other_agent(tmp_path, monkeypatch):
     config.write_text("{}")
     output = tmp_path / "graph.json"
     monkeypatch.setattr("agenthound.cli.observe_claude_pid", lambda pid: RuntimeIdentity(pid, "S-1-5-21-1-2-3-1104", "2026-10-05T00:00:00+00:00"))
-    result = CliRunner().invoke(cli, ["-c", str(config), "-w", str(tmp_path), "--claude-pid", "21088", "-o", str(output)])
+    result = CliRunner().invoke(cli, ["scan", "-c", str(config), "-w", str(tmp_path), "--claude-pid", "21088", "-o", str(output)])
     assert result.exit_code != 0
     assert not output.exists()
 
@@ -99,7 +99,7 @@ def test_cli_auto_observes_without_pid(tmp_path, monkeypatch):
         observed_pids.append(pid)
         return RuntimeIdentity(21088, "S-1-5-21-1-2-3-1104", "2026-10-05T00:00:00+00:00")
     monkeypatch.setattr("agenthound.cli.observe_claude_pid", observe)
-    result = CliRunner().invoke(cli, ["-c", str(config), "-w", str(tmp_path), "--process-identity", "-o", str(output)])
+    result = CliRunner().invoke(cli, ["scan", "-c", str(config), "-w", str(tmp_path), "--process-identity", "-o", str(output)])
     assert result.exit_code == 0, result.output
     assert observed_pids == [None]
     agent = next(node for node in json.loads(output.read_text())["graph"]["nodes"] if "Agent" in node["kinds"])
@@ -111,6 +111,6 @@ def test_cli_rejects_conflicting_selection(tmp_path):
     config.parent.mkdir()
     config.write_text("{}")
     output = tmp_path / "graph.json"
-    result = CliRunner().invoke(cli, ["-c", str(config), "-w", str(tmp_path), "--process-identity", "--claude-pid", "21088", "-o", str(output)])
+    result = CliRunner().invoke(cli, ["scan", "-c", str(config), "-w", str(tmp_path), "--process-identity", "--claude-pid", "21088", "-o", str(output)])
     assert result.exit_code != 0
     assert not output.exists()

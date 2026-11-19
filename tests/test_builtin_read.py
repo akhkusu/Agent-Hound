@@ -111,7 +111,7 @@ def test_cli_real_graph(tmp_path, monkeypatch):
     (workspace / 'README.md').write_text('Dummy documentation')
     monkeypatch.setattr('agenthound.cli.check_internet', lambda: False)
     output = tmp_path / 'graph.json'
-    result = CliRunner().invoke(cli, ['--config', str(config), '--workspace', str(workspace), '--scope', 'workspace', '-o', str(output)])
+    result = CliRunner().invoke(cli, ['scan', '--config', str(config), '--workspace', str(workspace), '--scope', 'workspace', '-o', str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())['graph']
     assert len(graph['nodes']) == 5

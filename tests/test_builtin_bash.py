@@ -43,7 +43,7 @@ def test_no_broad_bash_claim(tmp_path, permissions):
     assert not any(cap.name == "Bash" for cap in result.capabilities)
 
 
-def test_discover_merges_bash_allow_without_changing_read_only_demo(tmp_path, monkeypatch):
+def test_scan_merges_bash_allow_without_changing_read_only_demo(tmp_path, monkeypatch):
     home = tmp_path / "home"
     project = tmp_path / "project"
     home.mkdir()
@@ -59,12 +59,12 @@ def test_discover_merges_bash_allow_without_changing_read_only_demo(tmp_path, mo
     shared.write_text("{}")
     output = tmp_path / "graph.json"
     runner = CliRunner()
-    result = runner.invoke(cli, ["discover", "-w", str(project), "--scope", "workspace", "-o", str(output)])
+    result = runner.invoke(cli, ["scan", "-w", str(project), "--scope", "workspace", "-o", str(output)])
     assert result.exit_code == 0, result.output
     assert not any(node["properties"]["name"] == "BASH" for node in json.loads(output.read_text())["graph"]["nodes"])
 
     shared.write_text(json.dumps({"permissions": {"allow": ["Bash"]}}))
-    result = runner.invoke(cli, ["discover", "-w", str(project), "--scope", "workspace", "-o", str(output)])
+    result = runner.invoke(cli, ["scan", "-w", str(project), "--scope", "workspace", "-o", str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())["graph"]
     assert {node["properties"]["name"] for node in graph["nodes"]} >= {"READ", "BASH"}
