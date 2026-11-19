@@ -46,6 +46,68 @@ def test_skill_only_influences_matching_agent(tmp_path):
     assert claude_result.edges == []
 
 
+def test_project_skill_exports_frontmatter_metadata_without_body(tmp_path):
+    skill = tmp_path / ".agents" / "skills" / "review" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(
+        "---\nname: secure-review\ndescription: Review code for security issues.\n---\n"
+        "SECRET-INSTRUCTION-BODY\n"
+    )
+
+    agent = Agent(name="codex", platform="Codex", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
+
+    source = next(source for source in result.sources if source.source_kind == "Skill")
+    exported = source.to_opengraph()["properties"]
+    assert source.name == "Skill: secure-review"
+    assert exported["description"] == "Review code for security issues."
+    assert exported["source_scope"] == "project"
+    assert "SECRET-INSTRUCTION-BODY" not in str(exported)
+    edge = next(edge for edge in result.edges if edge.start == source.objectid)
+    assert edge.properties["confidence"] == "suspected"
+    assert "invocation unverified" in edge.properties["evidence"]
+
+
+def test_codex_all_scope_collects_user_and_system_skills(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    codex_home = home / ".codex"
+    user_skill = home / ".agents" / "skills" / "personal" / "SKILL.md"
+    system_skill = codex_home / "skills" / ".system" / "creator" / "SKILL.md"
+    for path, name in ((user_skill, "personal"), (system_skill, "creator")):
+        path.parent.mkdir(parents=True)
+        path.write_text(f"---\nname: {name}\ndescription: {name} skill\n---\n")
+    monkeypatch.setattr("agenthound.discovery.skills._user_home", lambda: home)
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+
+    agent = Agent(name="codex", platform="Codex", config_path=str(tmp_path))
+    result = collect_sources(agent=agent, workspace=tmp_path, scope="all")
+
+    skills = {source.name: source for source in result.sources if source.source_kind == "Skill"}
+    assert skills["Skill: personal"].source_scope == "user"
+    assert skills["Skill: creator"].source_scope == "system"
+    assert all(source.is_external for source in skills.values())
+    assert len(result.edges) == 2
+
+
+def test_claude_user_skills_only_influence_claude(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    claude_home = home / "custom-claude"
+    skill = claude_home / "skills" / "release" / "skill.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("---\nname: release\ndescription: Prepare releases\n---\n")
+    monkeypatch.setattr("agenthound.discovery.skills._user_home", lambda: home)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
+
+    claude = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
+    codex = Agent(name="codex", platform="Codex", config_path=str(tmp_path))
+    claude_result = collect_sources(claude, tmp_path, "global")
+    codex_result = collect_sources(codex, tmp_path, "global")
+
+    assert [source.name for source in claude_result.sources] == ["Skill: release"]
+    assert len(claude_result.edges) == 1
+    assert codex_result.sources == []
+
+
 def test_claude_rule_prompt_and_agent_definition_influence_claude(tmp_path):
     for relative in (
         ".claude/rules/python.md",

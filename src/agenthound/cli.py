@@ -16,6 +16,7 @@ from agenthound.collectors.capabilities import collect_from_configs
 from agenthound.collectors.impact import check_internet, collect_impact
 from agenthound.collectors.sources import collect_sources
 from agenthound.discovery.config_parser import discover_config_files
+from agenthound.discovery.mcp_live import MCPDiscoveryUnavailable, collect_live_mcp
 from agenthound.discovery.runtime_identity import RuntimeIdentityError, observe_claude_pid
 from agenthound.models.edges import Edge
 from agenthound.output.ad_bridge import build_ad_bridge
@@ -36,10 +37,15 @@ console = Console()
 @click.option("--verbose", "-v", is_flag=True)
 @click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
 @click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
+@click.option("--discover-mcp", is_flag=True,
+              help="Actively start/connect to configured MCP servers and list advertised metadata.")
+@click.option("--mcp-timeout", type=click.FloatRange(min=1.0, max=60.0), default=10.0,
+              show_default=True, help="Per-server live MCP discovery timeout in seconds.")
 @click.version_option(version=__version__)
 @click.pass_context
 def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
-        output: Path, verbose: bool, claude_pid: int | None, process_identity: bool) -> None:
+        output: Path, verbose: bool, claude_pid: int | None, process_identity: bool,
+        discover_mcp: bool, mcp_timeout: float) -> None:
     """Agent-Hound — BloodHound OpenGraph collector for AI agent attack paths."""
     ctx.ensure_object(dict)
     ctx.obj.update({"workspace": workspace, "scope": scope, "output": output, "verbose": verbose})
@@ -48,7 +54,8 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
             click.echo(ctx.get_help())
             return
         _run_scan([config], workspace, scope, output, verbose, claude_pid=claude_pid,
-                  process_identity=process_identity)
+                  process_identity=process_identity, discover_mcp=discover_mcp,
+                  mcp_timeout=mcp_timeout)
 
 
 @cli.command()
@@ -61,8 +68,12 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
 @click.option("--verbose", "-v", is_flag=True)
 @click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
 @click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
+@click.option("--discover-mcp", is_flag=True,
+              help="Actively start/connect to configured MCP servers and list advertised metadata.")
+@click.option("--mcp-timeout", type=click.FloatRange(min=1.0, max=60.0), default=10.0,
+              show_default=True, help="Per-server live MCP discovery timeout in seconds.")
 def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pid: int | None,
-             process_identity: bool) -> None:
+             process_identity: bool, discover_mcp: bool, mcp_timeout: float) -> None:
     """Discover configs; merge Claude user/shared/local settings for this workspace."""
     config_paths = discover_config_files(workspace)
     if not config_paths:
@@ -73,7 +84,8 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pi
         for p in config_paths:
             console.print(f"  {p}")
     _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=True,
-              claude_pid=claude_pid, process_identity=process_identity)
+              claude_pid=claude_pid, process_identity=process_identity,
+              discover_mcp=discover_mcp, mcp_timeout=mcp_timeout)
 
 
 @cli.command("ad-bridge")
@@ -94,7 +106,8 @@ def ad_bridge(agent_graph: Path, ad_zip: Path, output: Path) -> None:
 
 def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Path, verbose: bool,
               merge_claude: bool = False, claude_pid: int | None = None,
-              process_identity: bool = False) -> None:
+              process_identity: bool = False, discover_mcp: bool = False,
+              mcp_timeout: float = 10.0) -> None:
     if process_identity and claude_pid is not None:
         raise click.ClickException("Use either --process-identity or --claude-pid, not both")
     console.print(f"[bold blue]Agent-Hound v{__version__}[/bold blue]")
@@ -115,6 +128,25 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
                                      "runtime_computer_sid": identity.computer_sid})
             if agent == claude_agents[0] else agent for agent in cap_result.agents
         ]
+    live_sources = []
+    if discover_mcp:
+        console.print(
+            "[yellow]Live MCP discovery starts configured stdio commands and may send "
+            "configured credentials to remote servers.[/yellow]"
+        )
+        try:
+            live_result = collect_live_mcp(cap_result.capabilities, workspace, mcp_timeout)
+        except MCPDiscoveryUnavailable as exc:
+            raise click.ClickException(str(exc)) from exc
+        server_updates = {
+            cap.objectid: cap for cap in live_result.capabilities if cap.cap_kind == "MCPServer"
+        }
+        tools = [cap for cap in live_result.capabilities if cap.cap_kind == "MCPTool"]
+        cap_result.capabilities = [
+            server_updates.get(cap.objectid, cap) for cap in cap_result.capabilities
+        ] + tools
+        cap_result.edges.extend(live_result.edges)
+        live_sources = live_result.sources
     internet = check_internet()
 
     if verbose:
@@ -125,8 +157,9 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
     combined.agents = cap_result.agents
     combined.capabilities = cap_result.capabilities
     combined.edges.extend(cap_result.edges)
+    combined.sources.extend(live_sources)
 
-    seen_source_ids: set[str] = set()
+    seen_source_ids: set[str] = {source.objectid for source in live_sources}
     for agent in cap_result.agents:
         src = collect_sources(agent=agent, workspace=workspace, scope=scope)
         # A source file is one node; only the Influences edge is per-agent.
@@ -162,7 +195,12 @@ def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, 
     table.add_column("Pillar", style="cyan")
     table.add_column("Scanning", style="green")
     table.add_row("Capabilities", ", ".join(str(p.name) for p in config_paths))
-    table.add_row("Sources", str(workspace) if scope in ("workspace", "all") else "skipped")
+    source_scope = {
+        "workspace": str(workspace),
+        "global": "user/system skills",
+        "all": f"{workspace} + user/system skills",
+    }[scope]
+    table.add_row("Sources", source_scope)
     table.add_row("Assets", f"home dir + {workspace}" if scope == "all" else scope)
     table.add_row("Impact", f"connectivity={'reachable' if internet else 'blocked'} + shell + git")
     console.print(table)

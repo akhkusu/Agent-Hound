@@ -154,3 +154,29 @@ def test_same_named_server_distinct_across_agents():
     # Only claude_desktop has "filesystem"; assert agent_scope is populated so
     # a same-named server elsewhere would not collide.
     assert all(c.agent_scope for c in fs_caps)
+
+
+def test_mcp_static_metadata_is_useful_and_secret_safe(tmp_path):
+    cfg = tmp_path / "cursor_mcp.json"
+    cfg.write_text(json.dumps({
+        "mcpServers": {
+            "remote": {
+                "url": "https://mcp.example.com/api?token=never-export",
+                "transport": "http",
+                "env": {"API_TOKEN": "never-export-env"},
+                "headers": {"Authorization": "never-export-header"},
+                "enabled_tools": ["search", "read"],
+                "disabled_tools": ["delete"],
+            }
+        }
+    }))
+    _, caps = parse_config(cfg)
+    cap = caps[0]
+    assert cap.endpoint == "https://mcp.example.com/api"
+    assert cap.configured_env_vars == ("API_TOKEN",)
+    assert cap.configured_header_names == ("Authorization",)
+    assert cap.auth_kind == "environment+header"
+    assert cap.tool_allowlist == ("search", "read")
+    assert cap.tool_denylist == ("delete",)
+    output = json.dumps(cap.to_opengraph())
+    assert "never-export" not in output

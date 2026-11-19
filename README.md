@@ -53,6 +53,12 @@ python -m pip install .
 agenthound --help
 ```
 
+Install the optional MCP SDK when live MCP discovery is required:
+
+```bash
+python -m pip install '.[mcp]'
+```
+
 ### Scan a Project
 
 ```bash
@@ -61,6 +67,18 @@ agenthound discover -o output.json -v
 ```
 
 `discover` automatically reads supported configuration files from the home directory and project. For additional options, run `agenthound --help` or `agenthound discover --help`.
+
+Project and user `SKILL.md` files available to Claude Code and Codex are included as potential prompt sources. Agent-Hound exports skill metadata and paths, not instruction bodies.
+
+Agent-Hound reads MCP configuration by default, but does not start or connect to MCP servers.
+
+To connect to configured MCP servers and list their advertised tools, resources, and prompts:
+
+```bash
+agenthound discover --discover-mcp -o output.json
+```
+
+**Warning:** `--discover-mcp` starts configured local commands and may send configured credentials to remote servers. Use it only with MCP configurations you trust. Agent-Hound lists metadata only; it does not call tools or read resource and prompt content.
 
 ### Import into BloodHound
 

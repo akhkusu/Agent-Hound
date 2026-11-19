@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
+from agenthound.discovery.skills import find_user_skills, skill_info
 from agenthound.discovery.workspace import find_source_files
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Agent, Source
@@ -103,7 +104,17 @@ def _influence(
         targets, evidence_kind = path_targets
         if agent.name not in targets:
             return None
-        return True, "suspected", f"{evidence_kind}:{'/'.join(rel or ())}"
+        evidence = f"{evidence_kind}:{'/'.join(rel or ())}"
+        if source.source_kind == "Skill":
+            evidence += "; available skill, invocation unverified"
+        return True, "suspected", evidence
+
+    if source.source_kind == "Skill":
+        return (
+            True,
+            "suspected",
+            f"skill:{source.source_scope or 'user'}; available skill, invocation unverified",
+        )
 
     if source.source_kind == "AgentInstruction":
         if rel == (".github", "copilot-instructions.md"):
@@ -148,20 +159,21 @@ def _influence(
 
 def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResult:
     result = CollectionResult()
-
-    if scope == "global":
-        return result
-
-    raw = find_source_files(workspace)
     seen: set[str] = set()
+
+    raw = find_source_files(workspace) if scope in {"workspace", "all"} else []
 
     for path_str, kind in raw:
         fpath = Path(path_str)
+        metadata = skill_info(fpath, "project", "project") if kind == "Skill" else None
         source = Source(
-            name=_source_name(fpath, kind, workspace),
+            name=f"Skill: {metadata.name}" if metadata else _source_name(fpath, kind, workspace),
             source_kind=kind,
             path=path_str,
             is_external=False,
+            description=metadata.description if metadata else "",
+            source_scope=metadata.scope if metadata else "",
+            discovery_status="available" if metadata else "",
         )
         if source.objectid not in seen:
             result.sources.append(source)
@@ -175,5 +187,33 @@ def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResu
                 kind="Influences",
                 properties={"confidence": confidence, "evidence": evidence},
             ))
+
+    if scope in {"global", "all"}:
+        for metadata in find_user_skills(agent.name):
+            source = Source(
+                name=f"Skill: {metadata.name}",
+                source_kind="Skill",
+                path=str(metadata.path),
+                is_external=True,
+                description=metadata.description,
+                source_scope=metadata.scope,
+                discovery_status="available",
+            )
+            if source.objectid in seen:
+                continue
+            result.sources.append(source)
+            seen.add(source.objectid)
+            decision = _influence(source, agent, workspace)
+            if decision is not None:
+                _, confidence, evidence = decision
+                result.edges.append(Edge(
+                    start=source.objectid,
+                    end=agent.objectid,
+                    kind="Influences",
+                    properties={
+                        "confidence": confidence,
+                        "evidence": f"{evidence}; origin:{metadata.origin}",
+                    },
+                ))
 
     return result

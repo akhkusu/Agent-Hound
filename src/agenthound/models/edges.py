@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-EdgeKind = Literal["Influences", "HasCapability", "CanAccess", "Triggers"]
+EdgeKind = Literal["Influences", "HasCapability", "Exposes", "CanAccess", "Triggers"]
 
 
 class Edge(BaseModel):
