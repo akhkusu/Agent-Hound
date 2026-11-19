@@ -29,7 +29,7 @@ Agent-Hound models AI agent environments as five node types connected by four ed
 
 | Node | Role | Examples |
 | :--- | :--- | :--- |
-| **Source** | Local files that could influence an agent | `README.md`, `CLAUDE.md`, `AGENTS.md`, `SKILL.md`, path-specific rules, prompts, custom agents |
+| **Source** | Local files that could influence an agent | `README.md`, `CLAUDE.md`, `AGENTS.md`, agent rule files, reusable prompts, custom agent definitions |
 | **Agent** | Agent environment or observed API session | Claude Code, Codex, Copilot |
 | **Capability** | Configured MCP servers, command hooks, and supported built-in tools | `filesystem`, `github`, `Read`, `Bash` |
 | **Asset** | Discovered sensitive files and source repositories | `~/.ssh/id_rsa`, `.env`, a local Git repository |
@@ -53,12 +53,6 @@ python -m pip install .
 agenthound --help
 ```
 
-Install the optional MCP SDK when live MCP discovery is required:
-
-```bash
-python -m pip install '.[mcp]'
-```
-
 ### Scan a Project
 
 ```bash
@@ -66,19 +60,7 @@ agenthound doctor /path/to/project
 agenthound scan /path/to/project -o output.json
 ```
 
-`doctor` checks local setup; `scan` collects supported agent configurations and writes a BloodHound OpenGraph file. Omit the project path to use the current directory. Run `agenthound scan --help` for common options, or add `--help-all` to the root or scan command for advanced commands and options. See the [CLI guide](docs/cli.md).
-
-Project and user `SKILL.md` files available to Claude Code and Codex are included as potential prompt sources. Agent-Hound exports skill metadata and paths, not instruction bodies.
-
-Agent-Hound reads MCP configuration by default, but does not start or connect to MCP servers.
-
-To connect to configured MCP servers and list their advertised tools, resources, and prompts:
-
-```bash
-agenthound scan --discover-mcp -o output.json
-```
-
-**Warning:** `--discover-mcp` starts configured local commands and may send configured credentials to remote servers. Use it only with MCP configurations you trust. Agent-Hound lists metadata only; it does not call tools or read resource and prompt content.
+`doctor` checks local setup; `scan` writes a BloodHound OpenGraph file. Omit the project path to use the current directory. See the [CLI guide](docs/cli.md) for collection options and advanced commands.
 
 ### Import into BloodHound
 

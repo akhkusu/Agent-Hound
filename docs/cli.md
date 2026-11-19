@@ -32,7 +32,20 @@ agenthound scan ./my-project --scope workspace
 
 `--scope` controls sources and assets; it does not restrict configuration discovery to the project. Use `--config` when you want exactly one configuration file.
 
+Project and user `SKILL.md` files available to Claude Code and Codex are included as potential prompt sources. Agent-Hound exports skill metadata and paths, not instruction bodies.
+
 Normal scans may check internet connectivity when capabilities are found. MCP servers are read from configuration without being started or contacted. Live MCP collection requires `--discover-mcp`; live Microsoft 365 collection requires `--m365`.
+
+## Live MCP metadata
+
+From the root of a local checkout, install the optional MCP SDK and collect advertised metadata:
+
+```bash
+python -m pip install '.[mcp]'
+agenthound scan --discover-mcp -o graph.json
+```
+
+This starts configured local commands and may send configured credentials to remote servers. Use it only with MCP configurations you trust. Collection lists advertised tools, resources, and prompts; it does not call tools or read resource and prompt content.
 
 ## Find advanced features
 
