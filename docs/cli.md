@@ -9,6 +9,8 @@ agenthound scan ./my-project -o graph.json
 
 `scan` exports a BloodHound OpenGraph file and previews attack paths in the terminal. Without `-o`, it writes `agenthound_output.json`. Import the JSON through **File Ingest** in BloodHound CE.
 
+Use `-w`/`--workspace` on `scan` as an alternative to the positional project path. Supply one or the other, rather than both.
+
 ## Check the setup
 
 `doctor` checks local configuration and reports `OK`, `WARNING`, or `ERROR` with suggested next steps. It does not create a graph, launch MCP servers, authenticate to cloud services, or perform network checks. It cannot verify live server availability or cloud permissions. Errors return exit code 1; warnings alone return 0.
@@ -44,9 +46,3 @@ agenthound scan --help-all
 The standard help focuses on common operations. Root `--help-all` also lists the specialist commands for Copilot inventory, SharePoint metadata, M365 snapshot imports, AD/GitHub graph bridges, and BloodHound icons. `scan --help-all` shows all collection options. Specialist commands remain directly callable; use `<command> --help` for their options.
 
 See [Microsoft 365 integration](m365-integration.md), [AD integration](ad-integration.md), and [GitHound integration](github-integration.md) for complete workflows.
-
-## Update existing commands
-
-The former `discover` command has been replaced by `scan`. Move any root-level collection options after `scan`: the former `agenthound --config FILE` form is now `agenthound scan --config FILE`. The `--discover-mcp` flag keeps its existing name.
-
-The `-w`/`--workspace` option is still available on `scan` as an alternative to the positional project path. Supply one or the other, rather than both. Root options are limited to version and help.

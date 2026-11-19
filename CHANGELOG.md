@@ -9,8 +9,8 @@ All notable changes to Agent-Hound are documented here.
 - `--help-all` lists specialist commands; `scan --help-all` shows all collection options.
 
 ### Changed
-- Replaced `discover` with `scan [PATH]`. Update existing scripts to use `scan`; omitting PATH uses the current directory.
-- Moved collection options under `scan`: for example, `agenthound --config FILE` becomes `agenthound scan --config FILE`. Misplaced root options now fail instead of being silently ignored.
+- `scan [PATH]` accepts an optional project path; omitting PATH uses the current directory.
+- Collection options belong to `scan`. Misplaced root options return a usage error.
 - Standard help focuses on `scan` and `doctor`. Existing specialist commands remain directly callable.
 
 ## [0.1.0] - 2026-04-28
