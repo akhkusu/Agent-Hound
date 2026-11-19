@@ -16,6 +16,17 @@ from agenthound.models.nodes import Asset, Capability
 def _is_privileged(cap: Capability) -> bool:
     if cap.cap_kind == "ShellHook":
         return False
+    if cap.cap_kind in {"MCPServer", "MCPTool"} and cap.discovery_status:
+        # A declared filesystem root supports only a suspected scoped edge.
+        # Implementation/advertisement alone cannot establish host access.
+        if cap.effective_access_confidence == "none":
+            return bool(
+                cap.allowed_paths
+                and any(
+                    c.resource == "filesystem" and c.action == "read"
+                    for c in cap.claims
+                )
+            )
     if cap.shell_exec != "none":
         return True
     return cap.file_access != "none"
@@ -44,7 +55,9 @@ def _can_access(cap: Capability, asset: Asset) -> bool:
     # wrongly skipped writable assets for read-only caps).
     # Shell capabilities can reach any path; file scoping only constrains
     # capabilities whose access comes from a scoped file server.
-    if cap.shell_exec != "none":
+    if cap.shell_exec != "none" and not (
+        cap.discovery_status and cap.effective_access_confidence == "none"
+    ):
         return True
     if cap.allowed_paths is not None:
         return _in_allowed_paths(asset.path, cap.allowed_paths)
@@ -67,13 +80,22 @@ def _edge_properties(cap: Capability) -> dict[str, str]:
             # package is confirmed but reaching *this* asset is a guess.
             confidence = "suspected"
             evidence = (evidence + "; " if evidence else "") + "scope-unknown"
+    if (
+        cap.cap_kind in {"MCPServer", "MCPTool"}
+        and cap.discovery_status
+        and cap.effective_access_confidence == "none"
+    ):
+        confidence = "suspected"
+        evidence += "; declared scope only; effective access unverified"
     props: dict[str, str] = {"confidence": confidence}
     if evidence:
         props["evidence"] = evidence
     return props
 
 
-def collect_assets(capabilities: list[Capability], workspace: Path, scope: str) -> CollectionResult:
+def collect_assets(
+    capabilities: list[Capability], workspace: Path, scope: str
+) -> CollectionResult:
     result = CollectionResult()
     raw = find_asset_files(scope=scope, workspace=workspace)
     seen: set[str] = set()
@@ -103,19 +125,30 @@ def collect_assets(capabilities: list[Capability], workspace: Path, scope: str) 
             seen.add(asset.objectid)
             for cap in privileged:
                 if cap.cap_kind == "BuiltInTool":
-                    properties = (codex_builtin_access(cap, asset, workspace)
-                                  if cap.file_evidence.startswith("builtin:codex:")
-                                  else read_access(cap, asset, workspace))
+                    properties = (
+                        codex_builtin_access(cap, asset, workspace)
+                        if cap.file_evidence.startswith("builtin:codex:")
+                        else read_access(cap, asset, workspace)
+                    )
                     if properties is not None:
-                        result.edges.append(Edge(start=cap.objectid, end=asset.objectid, kind="CanAccess", properties=properties))
+                        result.edges.append(
+                            Edge(
+                                start=cap.objectid,
+                                end=asset.objectid,
+                                kind="CanAccess",
+                                properties=properties,
+                            )
+                        )
                     continue
                 if not _can_access(cap, asset):
                     continue
-                result.edges.append(Edge(
-                    start=cap.objectid,
-                    end=asset.objectid,
-                    kind="CanAccess",
-                    properties=_edge_properties(cap),
-                ))
+                result.edges.append(
+                    Edge(
+                        start=cap.objectid,
+                        end=asset.objectid,
+                        kind="CanAccess",
+                        properties=_edge_properties(cap),
+                    )
+                )
 
     return result

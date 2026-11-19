@@ -7,6 +7,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+from agenthound.models.claims import CapabilityClaim, Confidence
+
 SourceKind = Literal[
     "WebPage",
     "GitHubIssue",
@@ -25,14 +27,22 @@ SourceKind = Literal[
     "OutputStyle",
     "ContextVisibility",
 ]
-CapabilityKind = Literal["MCPServer", "MCPTool", "ShellHook", "Permission", "BuiltInTool"]
-AssetKind = Literal["SSHKey", "EnvFile", "AwsCredentials", "GCloudCredentials", "KubeConfig", "SourceCode"]
+CapabilityKind = Literal[
+    "MCPServer", "MCPTool", "ShellHook", "Permission", "BuiltInTool"
+]
+AssetKind = Literal[
+    "SSHKey",
+    "EnvFile",
+    "AwsCredentials",
+    "GCloudCredentials",
+    "KubeConfig",
+    "SourceCode",
+]
 ImpactKind = Literal["Exfiltration", "SupplyChainContamination", "SystemTakeover"]
 
-# How sure we are that a capability dimension really exists:
-# "confirmed" = derived from a fact in the config (known package, shell binary,
-# hook definition), "suspected" = name-based heuristic only.
-Confidence = Literal["none", "suspected", "confirmed"]
+# Legacy dimension confidence is separate from identity, implementation,
+# advertisement and effective-access confidence. Exact package evidence only
+# confirms the implementation operation; heuristic dimensions remain suspected.
 
 
 def _hash_id(prefix: str, *parts: str) -> str:
@@ -140,7 +150,13 @@ class Source(BaseModel):
             properties["arguments"] = list(self.arguments)
         if self.discovery_status:
             properties["discovery_status"] = self.discovery_status
-        for key in ("platform", "origin", "influence_channel", "activation", "target_pattern"):
+        for key in (
+            "platform",
+            "origin",
+            "influence_channel",
+            "activation",
+            "target_pattern",
+        ):
             value = getattr(self, key)
             if value:
                 properties[key] = value
@@ -191,6 +207,16 @@ class Capability(BaseModel):
     mcp_config_path: str = ""
     mcp_scope: str = ""
     mcp_evidence: str = ""
+    profile_id: str = ""
+    profile_status: str = ""
+    identity_confidence: Confidence = "none"
+    implementation_confidence: Confidence = "none"
+    live_advertisement_confidence: Confidence = "none"
+    effective_access_confidence: Confidence = "none"
+    claims: tuple[CapabilityClaim, ...] = ()
+    tool_name: str = ""
+    advertised_tool_names: tuple[str, ...] = ()
+    tool_allowlist_configured: bool = False
     package_name: str = ""
     endpoint: str = ""
     configured_env_vars: tuple[str, ...] = ()
@@ -248,9 +274,15 @@ class Capability(BaseModel):
         if self.command is not None:
             props["command"] = self.command
         if self.mcp_config_path:
-            props.update(config_path=self.mcp_config_path, mcp_scope=self.mcp_scope,
-                         evidence=self.mcp_evidence)
+            props.update(
+                config_path=self.mcp_config_path,
+                mcp_scope=self.mcp_scope,
+                evidence=self.mcp_evidence,
+            )
         for text_key, text_value in (
+            ("profile_id", self.profile_id),
+            ("profile_status", self.profile_status),
+            ("tool_name", self.tool_name),
             ("package_name", self.package_name),
             ("endpoint", self.endpoint),
             ("auth_kind", self.auth_kind if self.auth_kind != "none" else ""),
@@ -267,6 +299,11 @@ class Capability(BaseModel):
             if text_value:
                 props[text_key] = text_value
         for list_key, list_value in (
+            (
+                "capability_claims",
+                tuple(claim.flat_property() for claim in self.claims),
+            ),
+            ("advertised_tool_names", self.advertised_tool_names),
             ("configured_env_vars", self.configured_env_vars),
             ("configured_header_names", self.configured_header_names),
             ("tool_allowlist", self.tool_allowlist),
@@ -285,6 +322,15 @@ class Capability(BaseModel):
         ):
             if hint_value is not None:
                 props[hint_key] = hint_value
+        if self.cap_kind in {"MCPServer", "MCPTool"}:
+            for key in (
+                "identity_confidence",
+                "implementation_confidence",
+                "live_advertisement_confidence",
+                "effective_access_confidence",
+            ):
+                props[key] = getattr(self, key)
+            props["tool_allowlist_configured"] = self.tool_allowlist_configured
         if self.discovery_truncated:
             props["discovery_truncated"] = True
         if self.transport is not None:

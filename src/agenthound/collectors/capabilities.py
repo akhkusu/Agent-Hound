@@ -8,7 +8,10 @@ from agenthound.collectors.base import CollectionResult
 from agenthound.discovery.config_parser import claude_settings_paths, parse_config
 from agenthound.discovery.claude_settings import collect_claude_settings
 from agenthound.discovery.claude_mcp import claude_mcp_paths
-from agenthound.discovery.codex_settings import codex_config_paths, collect_codex_settings
+from agenthound.discovery.codex_settings import (
+    codex_config_paths,
+    collect_codex_settings,
+)
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Capability, Confidence
 
@@ -82,13 +85,40 @@ def _merge_capabilities(a: Capability, b: Capability) -> Capability:
     if a.cap_kind == "BuiltInTool":
         return a
     file_access, allowed_paths, file_readonly = _merge_file_dimension(a, b)
-    return Capability(
+    conflict = a.profile_id != b.profile_id and bool(a.profile_id or b.profile_id)
+    restricted = a.tool_allowlist_configured or b.tool_allowlist_configured
+    lists = [set(c.tool_allowlist) for c in (a, b) if c.tool_allowlist_configured]
+    allowlist = tuple(sorted(set.intersection(*lists))) if lists else ()
+    denylist = tuple(sorted(set(a.tool_denylist) | set(b.tool_denylist)))
+    claims = []
+    for claim in (*a.claims, *b.claims):
+        tools = tuple(
+            t
+            for t in claim.tools
+            if t not in denylist and (not restricted or t in allowlist)
+        )
+        if not tools:
+            continue
+        claim = claim.model_copy(update={"tools": tools})
+        if conflict:
+            claim = claim.model_copy(
+                update={
+                    "confidence": "suspected",
+                    "evidence": "Conflicting configured implementation identities; "
+                    + claim.evidence,
+                }
+            )
+        if claim not in claims:
+            claims.append(claim)
+    merged = Capability(
         name=a.name,
         cap_kind=a.cap_kind,
         command=a.command if a.command is not None else b.command,
         transport=a.transport if a.transport is not None else b.transport,
         agent_scope=a.agent_scope,
-        mcp_config_path=a.mcp_config_path, mcp_scope=a.mcp_scope, mcp_evidence=a.mcp_evidence,
+        mcp_config_path=a.mcp_config_path,
+        mcp_scope=a.mcp_scope,
+        mcp_evidence=a.mcp_evidence,
         shell_exec=_max_conf(a.shell_exec, b.shell_exec),
         file_access=file_access,
         network_send=_max_conf(a.network_send, b.network_send),
@@ -100,15 +130,78 @@ def _merge_capabilities(a: Capability, b: Capability) -> Capability:
         file_evidence=_merge_evidence(a.file_evidence, b.file_evidence),
         network_evidence=_merge_evidence(a.network_evidence, b.network_evidence),
         git_evidence=_merge_evidence(a.git_evidence, b.git_evidence),
+        profile_id=a.profile_id if a.profile_id == b.profile_id else "",
+        profile_status=a.profile_status if a.profile_status == b.profile_status else "",
+        identity_confidence="suspected"
+        if conflict
+        else _min_conf(a.identity_confidence, b.identity_confidence),
+        implementation_confidence="suspected"
+        if conflict and claims
+        else _min_conf(a.implementation_confidence, b.implementation_confidence),
+        live_advertisement_confidence=_min_conf(
+            a.live_advertisement_confidence, b.live_advertisement_confidence
+        ),
+        advertised_tool_names=tuple(
+            sorted(set(a.advertised_tool_names) | set(b.advertised_tool_names))
+        ),
+        effective_access_confidence="none"
+        if conflict
+        else _min_conf(a.effective_access_confidence, b.effective_access_confidence),
+        claims=tuple(claims),
+        tool_allowlist_configured=restricted,
         package_name=a.package_name or b.package_name,
         endpoint=a.endpoint or b.endpoint,
-        configured_env_vars=tuple(sorted(set(a.configured_env_vars) | set(b.configured_env_vars))),
-        configured_header_names=tuple(sorted(set(a.configured_header_names) | set(b.configured_header_names))),
+        configured_env_vars=tuple(
+            sorted(set(a.configured_env_vars) | set(b.configured_env_vars))
+        ),
+        configured_header_names=tuple(
+            sorted(set(a.configured_header_names) | set(b.configured_header_names))
+        ),
         auth_kind=a.auth_kind if a.auth_kind != "none" else b.auth_kind,
-        tool_allowlist=tuple(sorted(set(a.tool_allowlist) | set(b.tool_allowlist))),
-        tool_denylist=tuple(sorted(set(a.tool_denylist) | set(b.tool_denylist))),
+        tool_allowlist=allowlist,
+        tool_denylist=denylist,
         discovery_status=a.discovery_status or b.discovery_status,
     )
+
+    if a.claims or b.claims:
+        from agenthound.discovery.profiles import legacy_fields
+
+        merged = merged.model_copy(
+            update={
+                **legacy_fields(tuple(claims)),
+                "implementation_confidence": merged.implementation_confidence
+                if claims
+                else "none",
+            }
+        )
+    live_fields = (
+        "tool_name",
+        "description",
+        "input_schema",
+        "output_schema",
+        "read_only_hint",
+        "destructive_hint",
+        "idempotent_hint",
+        "open_world_hint",
+        "discovery_error",
+        "discovered_at",
+        "protocol_version",
+        "server_implementation",
+        "server_version",
+        "advertised_tools",
+        "advertised_resources",
+        "advertised_prompts",
+        "discovery_truncated",
+    )
+    merged = merged.model_copy(
+        update={
+            key: getattr(a, key)
+            if getattr(a, key) is not None and getattr(a, key) != ""
+            else getattr(b, key)
+            for key in live_fields
+        }
+    )
+    return merged
 
 
 def collect_from_config(config_path: Path) -> CollectionResult:
@@ -118,12 +211,33 @@ def collect_from_config(config_path: Path) -> CollectionResult:
     result.agents.append(agent)
     result.capabilities.extend(caps)
     for cap in caps:
-        properties = {"confidence": "suspected", "evidence": (cap.shell_evidence or cap.file_evidence) + "; runtime tool restrictions and other settings unverified"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
-        result.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=properties))
+        properties = (
+            {
+                "confidence": "suspected",
+                "evidence": (cap.shell_evidence or cap.file_evidence)
+                + "; runtime tool restrictions and other settings unverified",
+            }
+            if cap.cap_kind == "BuiltInTool"
+            else (
+                {"confidence": "suspected", "evidence": cap.mcp_evidence}
+                if cap.mcp_evidence
+                else {}
+            )
+        )
+        result.edges.append(
+            Edge(
+                start=agent.objectid,
+                end=cap.objectid,
+                kind="HasCapability",
+                properties=properties,
+            )
+        )
     return result
 
 
-def collect_from_configs(config_paths: list[Path], workspace: Path | None = None) -> CollectionResult:
+def collect_from_configs(
+    config_paths: list[Path], workspace: Path | None = None
+) -> CollectionResult:
     """Parse multiple config files, deduplicating agents and capabilities by objectid.
 
     Same-id capabilities from different configs are merged instead of dropped,
@@ -138,7 +252,10 @@ def collect_from_configs(config_paths: list[Path], workspace: Path | None = None
     partials = []
     grouped_paths: set[Path] = set()
     if workspace is not None:
-        candidates = {p.resolve() for p in [*claude_settings_paths(workspace), *claude_mcp_paths(workspace)]}
+        candidates = {
+            p.resolve()
+            for p in [*claude_settings_paths(workspace), *claude_mcp_paths(workspace)]
+        }
         grouped_paths = {p.resolve() for p in config_paths if p.resolve() in candidates}
         if grouped_paths:
             agent, caps = collect_claude_settings(config_paths, workspace)
@@ -148,11 +265,32 @@ def collect_from_configs(config_paths: list[Path], workspace: Path | None = None
             by_id = {cap.objectid: cap for cap in caps}
             partial.capabilities.extend(by_id.values())
             for cap in by_id.values():
-                props = {"confidence": "suspected", "evidence": (cap.shell_evidence or cap.file_evidence) + "; managed policy, runtime restrictions and trust unobserved"} if cap.cap_kind == "BuiltInTool" else ({"confidence": "suspected", "evidence": cap.mcp_evidence} if cap.mcp_evidence else {})
-                partial.edges.append(Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability", properties=props))
+                props = (
+                    {
+                        "confidence": "suspected",
+                        "evidence": (cap.shell_evidence or cap.file_evidence)
+                        + "; managed policy, runtime restrictions and trust unobserved",
+                    }
+                    if cap.cap_kind == "BuiltInTool"
+                    else (
+                        {"confidence": "suspected", "evidence": cap.mcp_evidence}
+                        if cap.mcp_evidence
+                        else {}
+                    )
+                )
+                partial.edges.append(
+                    Edge(
+                        start=agent.objectid,
+                        end=cap.objectid,
+                        kind="HasCapability",
+                        properties=props,
+                    )
+                )
             partials.append(partial)
         codex_candidates = {path.resolve() for path in codex_config_paths(workspace)}
-        codex_paths = [path for path in config_paths if path.resolve() in codex_candidates]
+        codex_paths = [
+            path for path in config_paths if path.resolve() in codex_candidates
+        ]
         grouped_paths.update(path.resolve() for path in codex_paths)
         if codex_paths:
             agent, caps = collect_codex_settings(codex_paths, workspace)
@@ -160,15 +298,25 @@ def collect_from_configs(config_paths: list[Path], workspace: Path | None = None
             partial.agents.append(agent)
             partial.capabilities.extend(caps)
             partial.edges.extend(
-                Edge(start=agent.objectid, end=cap.objectid, kind="HasCapability",
-                     properties={"confidence": "suspected", "evidence": cap.mcp_evidence})
+                Edge(
+                    start=agent.objectid,
+                    end=cap.objectid,
+                    kind="HasCapability",
+                    properties={
+                        "confidence": "suspected",
+                        "evidence": cap.mcp_evidence,
+                    },
+                )
                 for cap in caps
             )
             partials.append(partial)
-    partials.extend(collect_from_config(path) for path in config_paths if path.resolve() not in grouped_paths)
+    partials.extend(
+        collect_from_config(path)
+        for path in config_paths
+        if path.resolve() not in grouped_paths
+    )
 
     for partial in partials:
-
         for agent in partial.agents:
             if agent.objectid not in seen_agent_ids:
                 combined.agents.append(agent)
@@ -176,7 +324,9 @@ def collect_from_configs(config_paths: list[Path], workspace: Path | None = None
 
         for cap in partial.capabilities:
             existing = caps_by_id.get(cap.objectid)
-            caps_by_id[cap.objectid] = _merge_capabilities(existing, cap) if existing else cap
+            caps_by_id[cap.objectid] = (
+                _merge_capabilities(existing, cap) if existing else cap
+            )
 
         for edge in partial.edges:
             key = (edge.start, edge.end, edge.kind)

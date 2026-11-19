@@ -68,25 +68,33 @@ def test_parse_windsurf_config():
 
 def test_shell_server_detected(tmp_path):
     cfg = tmp_path / "claude_desktop_config.json"
-    cfg.write_text(json.dumps({
-        "mcpServers": {
-            "bash-exec": {
-                "command": "npx",
-                "args": ["-y", "mcp-server-shell-execute"]
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "bash-exec": {
+                        "command": "npx",
+                        "args": ["-y", "mcp-server-shell-execute"],
+                    }
+                }
             }
-        }
-    }))
+        )
+    )
     _, caps = parse_config(cfg)
     assert caps[0].has_shell is True
 
 
 def test_non_shell_server_not_flagged(tmp_path):
     cfg = tmp_path / "claude_desktop_config.json"
-    cfg.write_text(json.dumps({
-        "mcpServers": {
-            "memory": {"command": "npx", "args": ["-y", "server-memory"]}
-        }
-    }))
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "memory": {"command": "npx", "args": ["-y", "server-memory"]}
+                }
+            }
+        )
+    )
     _, caps = parse_config(cfg)
     assert caps[0].has_shell is False
 
@@ -110,18 +118,24 @@ def test_discover_config_files_returns_list(tmp_path, monkeypatch):
         assert p.exists()
 
 
-def test_shell_binary_launcher_detected_case_insensitive(tmp_path):
-    # A shell binary as command is a launcher signal (suspected), and must be
-    # recognized regardless of case / path separator.
+def test_shell_binary_launcher_does_not_grant_execution(tmp_path):
+    # A cross-platform shell launcher does not expose an execution tool.
     cfg = tmp_path / "claude_desktop_config.json"
-    cfg.write_text(json.dumps({
-        "mcpServers": {
-            "legacy-tool": {"command": "C:\\Windows\\System32\\PowerShell.EXE", "args": []}
-        }
-    }))
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "legacy-tool": {
+                        "command": "C:\\Windows\\System32\\PowerShell.EXE",
+                        "args": [],
+                    }
+                }
+            }
+        )
+    )
     _, caps = parse_config(cfg)
-    assert caps[0].shell_exec == "suspected"
-    assert caps[0].shell_evidence.startswith("shell-binary-launcher:")
+    assert caps[0].shell_exec == "none"
+    assert not caps[0].shell_evidence
 
 
 def test_hooks_remain_visible_without_arbitrary_shell_claim(tmp_path):
@@ -134,11 +148,18 @@ def test_hooks_remain_visible_without_arbitrary_shell_claim(tmp_path):
 def test_data_arg_does_not_seed_keyword(tmp_path):
     # A path argument containing "git" must not imply git_write.
     cfg = tmp_path / "claude_desktop_config.json"
-    cfg.write_text(json.dumps({
-        "mcpServers": {
-            "notes": {"command": "npx", "args": ["-y", "notes-mcp", "/home/user/git/cache"]}
-        }
-    }))
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "notes": {
+                        "command": "npx",
+                        "args": ["-y", "notes-mcp", "/home/user/git/cache"],
+                    }
+                }
+            }
+        )
+    )
     _, caps = parse_config(cfg)
     assert caps[0].git_write == "none"
 
@@ -146,10 +167,13 @@ def test_data_arg_does_not_seed_keyword(tmp_path):
 def test_same_named_server_distinct_across_agents():
     # "filesystem" in two different agent configs must be two nodes.
     from agenthound.collectors.capabilities import collect_from_configs
-    result = collect_from_configs([
-        FIXTURES / "claude_desktop_config.json",
-        FIXTURES / "vscode_mcp.json",
-    ])
+
+    result = collect_from_configs(
+        [
+            FIXTURES / "claude_desktop_config.json",
+            FIXTURES / "vscode_mcp.json",
+        ]
+    )
     fs_caps = [c for c in result.capabilities if c.name == "filesystem"]
     # Only claude_desktop has "filesystem"; assert agent_scope is populated so
     # a same-named server elsewhere would not collide.
@@ -158,18 +182,22 @@ def test_same_named_server_distinct_across_agents():
 
 def test_mcp_static_metadata_is_useful_and_secret_safe(tmp_path):
     cfg = tmp_path / "cursor_mcp.json"
-    cfg.write_text(json.dumps({
-        "mcpServers": {
-            "remote": {
-                "url": "https://mcp.example.com/api?token=never-export",
-                "transport": "http",
-                "env": {"API_TOKEN": "never-export-env"},
-                "headers": {"Authorization": "never-export-header"},
-                "enabled_tools": ["search", "read"],
-                "disabled_tools": ["delete"],
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "remote": {
+                        "url": "https://mcp.example.com/api?token=never-export",
+                        "transport": "http",
+                        "env": {"API_TOKEN": "never-export-env"},
+                        "headers": {"Authorization": "never-export-header"},
+                        "enabled_tools": ["search", "read"],
+                        "disabled_tools": ["delete"],
+                    }
+                }
             }
-        }
-    }))
+        )
+    )
     _, caps = parse_config(cfg)
     cap = caps[0]
     assert cap.endpoint == "https://mcp.example.com/api"
