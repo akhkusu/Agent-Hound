@@ -82,13 +82,13 @@ def test_snapshot_paths_preserve_context_and_weakest_confidence():
     assert any(p["confidence"] == "suspected" for p in paths)
 
 
-def test_discover_combines_copilot_and_snapshot_without_local_configs(tmp_path, monkeypatch):
+def test_scan_combines_copilot_and_snapshot_without_local_configs(tmp_path, monkeypatch):
     monkeypatch.setattr("agenthound.cli.discover_config_files", lambda workspace: [])
     (tmp_path / "Microsoft/Copilot/User Data").mkdir(parents=True)
     source = tmp_path / "snapshot.json"
     source.write_text(json.dumps(snapshot()), encoding="utf-8")
     out = tmp_path / "combined.json"
-    result = CliRunner().invoke(cli, ["discover", "-w", str(tmp_path), "--scope", "workspace",
+    result = CliRunner().invoke(cli, ["scan", "-w", str(tmp_path), "--scope", "workspace",
         "--local-app-data", str(tmp_path), "--m365-snapshot", str(source), "-o", str(out)])
     assert result.exit_code == 0, result.output
     graph = json.loads(out.read_text(encoding="utf-8"))["graph"]
@@ -98,7 +98,7 @@ def test_discover_combines_copilot_and_snapshot_without_local_configs(tmp_path, 
     assert {e["kind"] for e in graph["edges"]} <= {"HasCapability", "CanAccess", "Influences"}
 
 
-def test_discover_live_collection_uses_same_graph(tmp_path, monkeypatch):
+def test_scan_live_collection_uses_same_graph(tmp_path, monkeypatch):
     monkeypatch.setattr("agenthound.cli.discover_config_files", lambda workspace: [])
     calls = []
 
@@ -108,7 +108,7 @@ def test_discover_live_collection_uses_same_graph(tmp_path, monkeypatch):
 
     monkeypatch.setattr("agenthound.discovery.copilot_files.collect_copilot_files", collect)
     out = tmp_path / "live.json"
-    result = CliRunner().invoke(cli, ["discover", "-w", str(tmp_path), "--no-copilot",
+    result = CliRunner().invoke(cli, ["scan", "-w", str(tmp_path), "--no-copilot",
                                       "--m365", "--limit", "5", "--enumerate-all", "-o", str(out)])
     assert result.exit_code == 0, result.output
     assert calls[0]["display_limit"] == 5
@@ -120,16 +120,16 @@ def test_discover_live_collection_uses_same_graph(tmp_path, monkeypatch):
 @pytest.mark.parametrize("args", [["--no-copilot", "--include-registry"],
                                    ["--site-url", "https://example.sharepoint.com"], ["--limit", "5"],
                                    ["--enumerate-all"]])
-def test_discover_rejects_unused_options(args):
-    result = CliRunner().invoke(cli, ["discover", *args])
+def test_scan_rejects_unused_options(args):
+    result = CliRunner().invoke(cli, ["scan", *args])
     assert result.exit_code != 0
 
 
-def test_discover_protects_snapshot_and_copilot_stores(tmp_path, monkeypatch):
+def test_scan_protects_snapshot_and_copilot_stores(tmp_path, monkeypatch):
     monkeypatch.setattr("agenthound.cli.discover_config_files", lambda workspace: [])
     source = tmp_path / "snapshot.json"
     source.write_text(json.dumps(snapshot()), encoding="utf-8")
-    args = ["discover", "--local-app-data", str(tmp_path), "--m365-snapshot", str(source), "-o"]
+    args = ["scan", "--local-app-data", str(tmp_path), "--m365-snapshot", str(source), "-o"]
     assert CliRunner().invoke(cli, args + [str(source)]).exit_code != 0
     target = tmp_path / "Microsoft/OneAuth/accounts/account.json"
     target.parent.mkdir(parents=True)
@@ -138,14 +138,14 @@ def test_discover_protects_snapshot_and_copilot_stores(tmp_path, monkeypatch):
     assert target.read_text(encoding="utf-8") == "original"
 
 
-def test_discover_no_copilot_does_not_collect_inventory(tmp_path, monkeypatch):
+def test_scan_no_copilot_does_not_collect_inventory(tmp_path, monkeypatch):
     monkeypatch.setattr("agenthound.cli.discover_config_files", lambda workspace: [])
 
     def unexpected(*args, **kwargs):
         raise AssertionError("Inventory must be skipped")
 
     monkeypatch.setattr("agenthound.discovery.copilot_windows.inventory_copilot_windows", unexpected)
-    result = CliRunner().invoke(cli, ["discover", "--no-copilot", "-w", str(tmp_path), "-o", str(tmp_path / "empty.json")])
+    result = CliRunner().invoke(cli, ["scan", "--no-copilot", "-w", str(tmp_path), "-o", str(tmp_path / "empty.json")])
     assert result.exit_code == 0, result.output
     assert "no capability-to-target paths" in result.output
 
@@ -220,7 +220,7 @@ def test_unified_full_attack_chain_covers_claude_codex_and_copilot(tmp_path, mon
     monkeypatch.setattr("agenthound.cli.check_internet", lambda: False)
     monkeypatch.setattr("agenthound.discovery.copilot_files.collect_copilot_files", lambda **kwargs: listing())
     out = workspace / "graph.json"
-    result = CliRunner().invoke(cli, ["discover", "--no-copilot", "--m365", "-w", str(workspace),
+    result = CliRunner().invoke(cli, ["scan", "--no-copilot", "--m365", "-w", str(workspace),
                                       "--scope", "workspace", "-o", str(out)])
     assert result.exit_code == 0, result.output
     payload = json.loads(out.read_text(encoding="utf-8"))

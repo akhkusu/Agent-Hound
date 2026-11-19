@@ -62,11 +62,11 @@ python -m pip install '.[mcp]'
 ### Scan a Project
 
 ```bash
-cd /path/to/project
-agenthound discover -o output.json -v
+agenthound doctor /path/to/project
+agenthound scan /path/to/project -o output.json
 ```
 
-`discover` scans supported agent configurations and writes a BloodHound OpenGraph file. Run `agenthound discover --help` for collection options.
+`doctor` checks local setup; `scan` collects supported agent configurations and writes a BloodHound OpenGraph file. Omit the project path to use the current directory. Run `agenthound scan --help` for common options, or add `--help-all` to the root or scan command for advanced commands and options. See the [CLI guide](docs/cli.md).
 
 Project and user `SKILL.md` files available to Claude Code and Codex are included as potential prompt sources. Agent-Hound exports skill metadata and paths, not instruction bodies.
 
@@ -75,7 +75,7 @@ Agent-Hound reads MCP configuration by default, but does not start or connect to
 To connect to configured MCP servers and list their advertised tools, resources, and prompts:
 
 ```bash
-agenthound discover --discover-mcp -o output.json
+agenthound scan --discover-mcp -o output.json
 ```
 
 **Warning:** `--discover-mcp` starts configured local commands and may send configured credentials to remote servers. Use it only with MCP configurations you trust. Agent-Hound lists metadata only; it does not call tools or read resource and prompt content.
@@ -91,7 +91,7 @@ Upload the generated JSON through **File Ingest** in **BloodHound CE** (v8.0+), 
 Agent-Hound can collect information from Microsoft 365 and Copilot environments and map which resources may influence Copilot and which resources the same account may be able to access, such as SharePoint documents.
 
 ```powershell
-agenthound discover --m365 -o combined_graph.json
+agenthound scan --m365 -o combined_graph.json
 ```
 
 `--m365` requires Windows and an existing authorized Copilot account.

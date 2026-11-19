@@ -3,7 +3,7 @@
 On a domain-joined Windows host, run Claude Code and collect its process identity:
 
 ```powershell
-agenthound discover -w C:\path\to\project --process-identity -o agent.json
+agenthound scan C:\path\to\project --process-identity -o agent.json
 ```
 
 Create bridge edges from the observed user and computer SIDs to matching SharpHound objects:

@@ -107,20 +107,20 @@ def test_other_workspace_not_inherits_project_policy(layout, tmp_path):
     assert other_caps.agents[0].objectid != caps.agents[0].objectid
 
 
-def test_discover_and_single_file_cli(layout, monkeypatch, tmp_path):
+def test_scan_and_single_file_cli(layout, monkeypatch, tmp_path):
     home, project = layout
     paths = files(home, project, {'deny': ['Read(.env)']}, {}, {'allow': ['Read']})
     monkeypatch.setattr('agenthound.cli.check_internet', lambda: False)
     output = tmp_path / 'graph.json'
     runner = CliRunner()
-    result = runner.invoke(cli, ['discover', '-w', str(project), '--scope', 'workspace', '-o', str(output)])
+    result = runner.invoke(cli, ['scan', '-w', str(project), '--scope', 'workspace', '-o', str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())['graph']
     assert sum('Agent' in n['kinds'] for n in graph['nodes']) == 1
     assert sum(n['properties'].get('cap_kind') == 'BuiltInTool' for n in graph['nodes']) == 1
     assert not any(e['kind'] == 'CanAccess' for e in graph['edges'])
     assert len({n['id'] for n in graph['nodes']}) == len(graph['nodes'])
-    result = runner.invoke(cli, ['-c', str(paths[2]), '-w', str(project), '--scope', 'workspace', '-o', str(output)])
+    result = runner.invoke(cli, ['scan', '-c', str(paths[2]), '-w', str(project), '--scope', 'workspace', '-o', str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())['graph']
     assert sum(e['kind'] == 'CanAccess' for e in graph['edges']) == 1

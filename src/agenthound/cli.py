@@ -31,43 +31,69 @@ from agenthound.platforms import CUSTOM_TYPES
 console = Console()
 
 
-@click.group(invoke_without_command=True)
-@click.option("--config", "-c", type=click.Path(exists=True, path_type=Path), help="Scan only this config file; do not merge user/project/local settings.")
-@click.option("--workspace", "-w", type=click.Path(exists=True, path_type=Path),
-              default=".", show_default=True, help="Workspace directory to scan for sources.")
-@click.option("--scope", type=click.Choice(["workspace", "global", "all"]), default="all",
-              show_default=True, help="Scanning scope for assets.")
-@click.option("--output", "-o", type=click.Path(path_type=Path), default="agenthound_output.json",
-              show_default=True, help="Output file path.")
-@click.option("--verbose", "-v", is_flag=True)
-@click.option("--claude-pid", type=click.IntRange(min=1), help="Observe this local Windows claude.exe process owner SID.")
-@click.option("--process-identity", is_flag=True, help="Collect PID and owner SID of the sole local Windows claude.exe process.")
-@click.option("--discover-mcp", is_flag=True,
-              help="Actively start/connect to configured MCP servers and list advertised metadata.")
-@click.option("--mcp-timeout", type=click.FloatRange(min=1.0, max=60.0), default=10.0,
-              show_default=True, help="Per-server live MCP discovery timeout in seconds.")
+def _show_all_help(ctx: click.Context, _param: click.Parameter, value: bool) -> None:
+    if value and not ctx.resilient_parsing:
+        ctx.meta["help_all"] = True
+        click.echo(ctx.get_help())
+        ctx.exit()
+
+
+class _MainGroup(click.Group):
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        commands = {name: self.get_command(ctx, name) for name in self.list_commands(ctx)}
+        for title, primary in (("Commands", True), ("Advanced commands", False)):
+            if not primary and not ctx.meta.get("help_all"):
+                continue
+            rows = [
+                (name, command.get_short_help_str())
+                for name, command in commands.items()
+                if command is not None and not command.hidden
+                and (name in {"scan", "doctor"}) == primary
+            ]
+            if rows:
+                with formatter.section(title):
+                    formatter.write_dl(rows)
+
+
+class _ScanCommand(click.Command):
+    def format_options(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        basic = {"config", "workspace", "scope", "output", "verbose", "discover_mcp", "m365", "help_all", "help"}
+        for title, primary in (("Options", True), ("Advanced options", False)):
+            if not primary and not ctx.meta.get("help_all"):
+                continue
+            rows = [
+                record for param in self.get_params(ctx)
+                if (param.name in basic) == primary
+                and (record := param.get_help_record(ctx)) is not None
+            ]
+            if rows:
+                with formatter.section(title):
+                    formatter.write_dl(rows)
+
+
+@click.group(cls=_MainGroup, invoke_without_command=True)
+@click.option("--help-all", is_flag=True, is_eager=True, expose_value=False,
+              callback=_show_all_help, help="Show all commands, including advanced integrations.")
 @click.version_option(version=__version__)
 @click.pass_context
-def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
-        output: Path, verbose: bool, claude_pid: int | None, process_identity: bool,
-        discover_mcp: bool, mcp_timeout: float) -> None:
-    """Agent-Hound — BloodHound OpenGraph collector for AI agent attack paths."""
-    ctx.ensure_object(dict)
-    ctx.obj.update({"workspace": workspace, "scope": scope, "output": output, "verbose": verbose})
+def cli(ctx: click.Context) -> None:
+    """Map AI agent attack paths and export them to BloodHound.
+
+    Start with `agenthound scan`, or check your setup with `agenthound doctor`.
+    Use --help-all for advanced integration commands.
+    """
     if ctx.invoked_subcommand is None:
-        if config is None:
-            click.echo(ctx.get_help())
-            return
-        _run_scan([config], workspace, scope, output, verbose, claude_pid=claude_pid,
-                  process_identity=process_identity, discover_mcp=discover_mcp,
-                  mcp_timeout=mcp_timeout)
+        click.echo(ctx.get_help())
 
 
-@cli.command()
-@click.option("--workspace", "-w", type=click.Path(exists=True, path_type=Path),
-              default=".", show_default=True)
+@cli.command(cls=_ScanCommand)
+@click.argument("path", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--config", "-c", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Use only this agent config; do not merge user/project/local settings.")
+@click.option("--workspace", "-w", type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="Workspace directory; an alternative to PATH.")
 @click.option("--scope", type=click.Choice(["workspace", "global", "all"]), default="all",
-              show_default=True)
+              show_default=True, help="Source and asset scope; agent config discovery is separate.")
 @click.option("--output", "-o", type=click.Path(path_type=Path), default="agenthound_output.json",
               show_default=True)
 @click.option("--verbose", "-v", is_flag=True)
@@ -77,8 +103,8 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
               help="Actively start/connect to configured MCP servers and list advertised metadata.")
 @click.option("--mcp-timeout", type=click.FloatRange(min=1.0, max=60.0), default=10.0,
               show_default=True, help="Per-server live MCP discovery timeout in seconds.")
-@click.option("--copilot/--no-copilot", default=True, show_default=True,
-              help="Include local Windows Copilot observations when LocalAppData is available.")
+@click.option("--copilot/--no-copilot", default=None,
+              help="Include local Windows Copilot observations; automatic unless --config is set.")
 @click.option("--local-app-data", type=click.Path(exists=True, file_okay=False, path_type=Path),
               help="Copilot LocalAppData root, including an authorized offline copy.")
 @click.option("--include-registry", is_flag=True, help="Include current-user Copilot cached registry flags.")
@@ -91,13 +117,20 @@ def cli(ctx: click.Context, config: Path | None, workspace: Path, scope: str,
               help="Maximum live SharePoint file metadata records retained.")
 @click.option("--enumerate-all", is_flag=True,
               help="Finish recursive SharePoint enumeration; --limit still bounds retained document nodes.")
-def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pid: int | None,
+@click.option("--help-all", is_flag=True, is_eager=True, expose_value=False,
+              callback=_show_all_help, help="Show every collection option.")
+def scan(path: Path | None, config: Path | None, workspace: Path | None,
+             scope: str, output: Path, verbose: bool, claude_pid: int | None,
              process_identity: bool, discover_mcp: bool, mcp_timeout: float,
-             copilot: bool, local_app_data: Path | None,
+             copilot: bool | None, local_app_data: Path | None,
              include_registry: bool, m365: bool, m365_snapshot: Path | None,
              site_url: str | None, copilot_client_id: str | None, limit: int,
              enumerate_all: bool) -> None:
-    """Discover local agents and export one graph with an Attack Paths preview."""
+    """Scan PATH (current directory by default) and export an attack-path graph.
+
+    Agent configs are detected automatically. Use --config to select one file,
+    and --help-all for advanced collection options.
+    """
     import os
 
     from pydantic import ValidationError
@@ -111,6 +144,10 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pi
     from agenthound.output.m365 import build_m365_graph
     from agenthound.output.unified import build_metadata_graph
 
+    if path is not None and workspace is not None:
+        raise click.UsageError("Use PATH or --workspace, not both.")
+    workspace = path or workspace or Path(".")
+    copilot = copilot if copilot is not None else config is None
     if not copilot and (local_app_data is not None or include_registry):
         raise click.ClickException("--local-app-data and --include-registry require --copilot")
     if not m365 and (site_url is not None or copilot_client_id is not None or limit != 20 or enumerate_all):
@@ -143,15 +180,36 @@ def discover(workspace: Path, scope: str, output: Path, verbose: bool, claude_pi
         raise click.ClickException(f"Invalid M365 observation: {details}") from exc
     except (M365FilesError, ValueError, OSError) as exc:
         raise click.ClickException(str(exc)) from exc
-    config_paths = discover_config_files(workspace)
+    config_paths = [config] if config is not None else discover_config_files(workspace)
     if verbose:
         console.print(f"[blue]Found {len(config_paths)} config file(s)[/blue]")
         for p in config_paths:
             console.print(f"  {p}")
-    _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=True,
+    _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=config is None,
               claude_pid=claude_pid, process_identity=process_identity,
               discover_mcp=discover_mcp, mcp_timeout=mcp_timeout,
               extra_graphs=extra_graphs)
+
+
+@cli.command()
+@click.argument("path", default=".", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option("--config", "-c", type=click.Path(exists=True, dir_okay=False, path_type=Path),
+              help="Check only this agent config file.")
+def doctor(path: Path, config: Path | None) -> None:
+    """Check local setup and suggest fixes without running a scan."""
+    from agenthound.diagnostics import run_diagnostics
+
+    findings = run_diagnostics(path, config=config)
+    for finding in findings:
+        click.echo(f"{finding.status.upper():7} {finding.check}: {finding.message}")
+        if finding.path is not None:
+            click.echo(f"        {finding.path}")
+    errors = sum(finding.status == "error" for finding in findings)
+    warnings = sum(finding.status == "warning" for finding in findings)
+    click.echo(f"\n{errors} error(s), {warnings} warning(s).")
+    click.echo("Local checks only; network connectivity, MCP startup and authentication were not tested.")
+    if errors:
+        raise click.exceptions.Exit(1)
 
 
 def _validate_inventory_destinations(inventory: dict[str, Any], destinations: list[Path]) -> None:

@@ -5,7 +5,7 @@ GitHound remains responsible for collecting all GitHub-native nodes and edges. A
 Run Agent-Hound against the local workspace:
 
 ```bash
-agenthound discover -w /path/to/project -o agent.json
+agenthound scan /path/to/project -o agent.json
 ```
 
 Collect the corresponding organization with GitHound, including repositories and branches, then create the bridge:
