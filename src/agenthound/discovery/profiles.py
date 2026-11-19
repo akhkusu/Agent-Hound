@@ -218,7 +218,20 @@ def extract_allowed_paths(args: list[str], payload_index: int) -> tuple[str, ...
     config may describe another host. Returns None (scope unknown) when no
     directory args are present — e.g. an MCP-roots-only setup.
     """
-    candidates = [a for a in args[payload_index:] if not a.startswith("-")]
+    candidates: list[str] = []
+    unknown_options = False
+    for arg in args[payload_index:]:
+        if arg == "--verbose":
+            # Preserve the existing supported flag without interpreting a value.
+            continue
+        if arg.startswith("-"):
+            # An unknown option may take credentials or arbitrary data. Do not
+            # reinterpret its value, or any later ambiguous operands, as paths.
+            unknown_options = True
+            break
+        candidates.append(arg)
+    if unknown_options and not candidates:
+        return ()
     if not candidates:
         return None
     return tuple(os.path.abspath(os.path.expanduser(a)) for a in candidates)
@@ -235,6 +248,7 @@ def extract_repo_scope(args: list[str], payload_index: int) -> tuple[str, ...] |
     """
     payload = args[payload_index:]
     i = 0
+    positional_safe = True
     while i < len(payload):
         arg = payload[i]
         flag, _, inline_value = arg.partition("=")
@@ -244,7 +258,11 @@ def extract_repo_scope(args: list[str], payload_index: int) -> tuple[str, ...] |
                 return (os.path.abspath(os.path.expanduser(value)),)
             i += 1 if inline_value else 2
             continue
-        if not arg.startswith("-"):
+        if arg.startswith("-"):
+            # Only documented repository flags establish the meaning of their
+            # value. Unknown option values must not become exported repo paths.
+            positional_safe = False
+        elif positional_safe:
             return (os.path.abspath(os.path.expanduser(arg)),)
         i += 1
     return None

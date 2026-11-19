@@ -1,11 +1,11 @@
 """Extract registered Claude MCP definitions without exporting app/auth state."""
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Any
 
+from agenthound.discovery.behavior_files import read_json
 from agenthound.models.nodes import Agent, Capability
 
 
@@ -16,12 +16,9 @@ def claude_mcp_paths(workspace: Path) -> list[Path]:
 
 
 def load_object(path: Path) -> dict[str, Any]:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError) as exc:
-        raise ValueError(f'Cannot parse config {path}: {exc}') from exc
-    if not isinstance(raw, dict):
-        raise ValueError(f'Config must be an object: {path}')
+    raw = read_json(path, path.parent)
+    if raw is None:
+        raise ValueError(f'Cannot parse config {path}: expected a readable JSON object of at most 64 KiB')
     return raw
 
 

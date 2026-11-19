@@ -34,3 +34,14 @@ def test_print_findings_ignores_uninfluencing_source(capsys):
     assert "1 IPI source(s)" in out
     assert "README.md" in out
     assert ".cursorrules" not in out
+
+
+def test_runtime_configuration_is_not_reported_as_prompt_injection(capsys):
+    result = CollectionResult()
+    source = Source(name="settings.json", source_kind="RuntimeConfiguration", path="/w/settings.json",
+                    influence_channel="runtime_configuration", activation="configured")
+    result.sources.append(source)
+    result.edges.append(Edge(start=source.objectid, end="agent", kind="Influences",
+                             properties={"influence_channel": "runtime_configuration"}))
+    _print_findings(result)
+    assert "IPI" not in capsys.readouterr().out

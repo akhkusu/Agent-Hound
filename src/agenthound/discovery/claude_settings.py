@@ -5,10 +5,10 @@ Read retains each source's rules so settings-relative anchors are not lost.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
+from agenthound.discovery.behavior_files import read_json
 from agenthound.discovery.config_parser import claude_settings_paths, parse_config_data
 from agenthound.discovery.claude_mcp import collect_mcp
 from agenthound.models.nodes import Agent, Capability
@@ -30,18 +30,15 @@ def collect_claude_settings(paths: list[Path], workspace: Path) -> tuple[Agent, 
     workspace = workspace.resolve()
     supplied = {p.resolve() for p in paths}
     merged: dict[str, Any] = {}
-    sources = []
+    sources: list[dict[str, Any]] = []
     seen = set()
     for index, path in enumerate(claude_settings_paths(workspace)):
         if path.resolve() not in supplied or path.resolve() in seen:
             continue
         seen.add(path.resolve())
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError) as exc:
-            raise ValueError(f"Cannot parse config {path}: {exc}") from exc
-        if not isinstance(raw, dict):
-            raise ValueError(f"Config must be an object: {path}")
+        raw = read_json(path, path.parent)
+        if raw is None:
+            raise ValueError(f"Cannot parse config {path}: expected a readable JSON object of at most 64 KiB")
         merged = _merge(merged, raw)
         policy = raw.get("permissions", {})
         if not isinstance(policy, dict):

@@ -419,6 +419,7 @@ def _advertisement_result(
             mime_type=_text(advertised.get("mimeType")),
             mcp_server=server.name,
             discovery_status="advertised",
+            influence_channel="mcp_advertisement", activation="observed", source_scope="session",
         )
         result.sources.append(source)
         result.edges.append(Edge(
@@ -438,6 +439,7 @@ def _advertisement_result(
             mcp_server=server.name,
             arguments=tuple(str(item.get("name")) for item in arguments if isinstance(item, dict)),
             discovery_status="advertised",
+            influence_channel="mcp_advertisement", activation="observed", source_scope="session",
         )
         result.sources.append(source)
         result.edges.append(Edge(

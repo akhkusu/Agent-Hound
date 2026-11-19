@@ -18,6 +18,12 @@ SourceKind = Literal[
     "AgentInstruction",
     "MCPResource",
     "MCPPrompt",
+    "Memory",
+    "RuntimeConfiguration",
+    "HookScript",
+    "PluginManifest",
+    "OutputStyle",
+    "ContextVisibility",
 ]
 CapabilityKind = Literal["MCPServer", "MCPTool", "ShellHook", "Permission", "BuiltInTool"]
 AssetKind = Literal["SSHKey", "EnvFile", "AwsCredentials", "GCloudCredentials", "KubeConfig", "SourceCode"]
@@ -91,6 +97,13 @@ class Source(BaseModel):
     mcp_server: str = ""
     arguments: tuple[str, ...] = ()
     discovery_status: str = ""
+    platform: str = ""
+    origin: str = ""
+    influence_channel: str = ""
+    activation: str = ""
+    precedence: int = 0
+    content_exported: bool = False
+    target_pattern: str = ""
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -106,6 +119,7 @@ class Source(BaseModel):
             "source_kind": self.source_kind,
             "path": self.path,
             "is_external": self.is_external,
+            "content_exported": False,
         }
         if self.git_repository_asset_id:
             properties.update(
@@ -126,6 +140,12 @@ class Source(BaseModel):
             properties["arguments"] = list(self.arguments)
         if self.discovery_status:
             properties["discovery_status"] = self.discovery_status
+        for key in ("platform", "origin", "influence_channel", "activation", "target_pattern"):
+            value = getattr(self, key)
+            if value:
+                properties[key] = value
+        if self.precedence:
+            properties["precedence"] = self.precedence
         return {
             "id": self.objectid,
             "kinds": ["Source"],

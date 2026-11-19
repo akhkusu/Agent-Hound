@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import zipfile
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,7 @@ from agenthound.collectors.assets import collect_assets
 from agenthound.collectors.base import CollectionResult
 from agenthound.collectors.capabilities import collect_from_configs
 from agenthound.collectors.impact import check_internet, collect_impact
-from agenthound.collectors.sources import collect_sources
+from agenthound.collectors.sources import collect_sources_for_agents
 from agenthound.discovery.config_parser import discover_config_files
 from agenthound.discovery.mcp_live import MCPDiscoveryUnavailable, collect_live_mcp
 from agenthound.discovery.runtime_identity import (
@@ -103,6 +104,8 @@ def cli(ctx: click.Context) -> None:
               help="Actively start/connect to configured MCP servers and list advertised metadata.")
 @click.option("--mcp-timeout", type=click.FloatRange(min=1.0, max=60.0), default=10.0,
               show_default=True, help="Per-server live MCP discovery timeout in seconds.")
+@click.option("--include-plugin-cache", is_flag=True,
+              help="Inspect selected installed plugin manifests and declared components; never execute them.")
 @click.option("--copilot/--no-copilot", default=None,
               help="Include local Windows Copilot observations; automatic unless --config is set.")
 @click.option("--local-app-data", type=click.Path(exists=True, file_okay=False, path_type=Path),
@@ -121,7 +124,7 @@ def cli(ctx: click.Context) -> None:
               callback=_show_all_help, help="Show every collection option.")
 def scan(path: Path | None, config: Path | None, workspace: Path | None,
              scope: str, output: Path, verbose: bool, claude_pid: int | None,
-             process_identity: bool, discover_mcp: bool, mcp_timeout: float,
+             process_identity: bool, discover_mcp: bool, mcp_timeout: float, include_plugin_cache: bool,
              copilot: bool | None, local_app_data: Path | None,
              include_registry: bool, m365: bool, m365_snapshot: Path | None,
              site_url: str | None, copilot_client_id: str | None, limit: int,
@@ -188,7 +191,7 @@ def scan(path: Path | None, config: Path | None, workspace: Path | None,
     _run_scan(config_paths, workspace, scope, output, verbose, merge_claude=config is None,
               claude_pid=claude_pid, process_identity=process_identity,
               discover_mcp=discover_mcp, mcp_timeout=mcp_timeout,
-              extra_graphs=extra_graphs)
+              extra_graphs=extra_graphs, include_plugin_cache=include_plugin_cache)
 
 
 @cli.command()
@@ -445,7 +448,8 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
               merge_claude: bool = False, claude_pid: int | None = None,
               process_identity: bool = False, discover_mcp: bool = False,
               mcp_timeout: float = 10.0,
-              extra_graphs: list[dict[str, Any]] | None = None) -> None:
+              extra_graphs: list[dict[str, Any]] | None = None,
+              include_plugin_cache: bool = False) -> None:
     from agenthound.output.attack_paths import print_attack_paths
     from agenthound.output.unified import merge_graphs
 
@@ -454,7 +458,10 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
     console.print(f"[bold blue]Agent-Hound v{__version__}[/bold blue]")
     console.print()
 
-    cap_result = collect_from_configs(config_paths, workspace=workspace if merge_claude else None)
+    try:
+        cap_result = collect_from_configs(config_paths, workspace=workspace if merge_claude else None)
+    except (ValueError, OSError, TypeError, AttributeError, KeyError):
+        raise click.ClickException("Agent configuration could not be parsed safely. Check it with agenthound doctor.") from None
     if process_identity or claude_pid is not None:
         claude_agents = [agent for agent in cap_result.agents if agent.name == "claude-code"]
         if len(claude_agents) != 1:
@@ -500,15 +507,12 @@ def _run_scan(config_paths: list[Path], workspace: Path, scope: str, output: Pat
     combined.edges.extend(cap_result.edges)
     combined.sources.extend(live_sources)
 
-    seen_source_ids: set[str] = {source.objectid for source in live_sources}
-    for agent in cap_result.agents:
-        src = collect_sources(agent=agent, workspace=workspace, scope=scope)
-        # A source file is one node; only the Influences edge is per-agent.
-        for source in src.sources:
-            if source.objectid not in seen_source_ids:
-                combined.sources.append(source)
-                seen_source_ids.add(source.objectid)
-        combined.edges.extend(src.edges)
+    src = collect_sources_for_agents(cap_result.agents, workspace, scope, include_plugin_cache)
+    seen_source_ids = {source.objectid for source in live_sources}
+    combined.sources.extend(source for source in src.sources if source.objectid not in seen_source_ids)
+    combined.edges.extend(src.edges)
+    if verbose:
+        _print_source_summary(combined)
 
     asset_result = collect_assets(capabilities=cap_result.capabilities, workspace=workspace, scope=scope)
     combined.assets = asset_result.assets
@@ -541,14 +545,33 @@ def _print_scope_summary(config_paths: list[Path], workspace: Path, scope: str, 
     table.add_row("Capabilities", ", ".join(str(p.name) for p in config_paths))
     source_scope = {
         "workspace": str(workspace),
-        "global": "user/system skills",
-        "all": f"{workspace} + user/system skills",
+        "global": "user/system/managed behavior files",
+        "all": f"{workspace} + user/system/managed behavior files",
     }[scope]
     table.add_row("Sources", source_scope)
     table.add_row("Assets", f"home dir + {workspace}" if scope == "all" else scope)
     table.add_row("Impact", f"connectivity={'reachable' if internet else 'blocked'} + shell + git")
     console.print(table)
     console.print()
+
+
+def _print_source_summary(result: CollectionResult) -> None:
+    table = Table(title="Source Discovery")
+    for title in ("Dimension", "Value", "Sources"):
+        table.add_column(title)
+    for label, attribute in (("Platform", "platform"), ("Source kind", "source_kind"),
+                             ("Scope", "source_scope"), ("Activation", "activation")):
+        counts: Counter[str] = Counter()
+        values: dict[str, set[str]] = {}
+        for edge in result.edges:
+            if edge.kind == "Influences" and edge.properties.get(attribute):
+                values.setdefault(edge.start, set()).add(str(edge.properties[attribute]))
+        for source in result.sources:
+            for value in values.get(source.objectid, {str(getattr(source, attribute) or "unknown")}):
+                counts[value] += 1
+        for value, count in sorted(counts.items()):
+            table.add_row(label, value, str(count))
+    console.print(table)
 
 
 def _edge_confidence_note(edges: list[Edge]) -> str:
@@ -574,7 +597,8 @@ def _print_findings(result: CollectionResult) -> None:
     findings: list[str] = []
     # Only sources that actually influence an agent count as IPI entry points.
     influenced = {e.start for e in result.edges if e.kind == "Influences"}
-    ipi_sources = [s for s in result.sources if s.objectid in influenced]
+    behavior_only = {"runtime_configuration", "hook_execution", "plugin", "context_visibility"}
+    ipi_sources = [s for s in result.sources if s.objectid in influenced and s.influence_channel not in behavior_only]
     if ipi_sources:
         findings.append(
             f"[yellow]{len(ipi_sources)} IPI source(s): "

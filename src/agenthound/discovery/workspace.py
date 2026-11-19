@@ -8,35 +8,6 @@ from pathlib import Path
 
 from agenthound.models.nodes import AssetKind, SourceKind
 
-_AGENT_INSTRUCTION_NAMES = {
-    "CLAUDE.md", "AGENTS.md", "AGENTS.override.md", "GEMINI.md", ".cursorrules",
-    "SYSTEM_PROMPT.md",
-}
-
-_COPILOT_INSTRUCTION_PATH = (".github", "copilot-instructions.md")
-
-_SKILL_ROOTS = {
-    (".agents", "skills"),
-    (".claude", "skills"),
-    (".github", "skills"),
-}
-
-_RULE_ROOTS = {
-    (".claude", "rules"),
-    (".cursor", "rules"),
-    (".github", "instructions"),
-}
-
-_PROMPT_ROOTS = {
-    (".claude", "commands"),
-    (".github", "prompts"),
-}
-
-_AGENT_DEFINITION_ROOTS = {
-    (".claude", "agents"),
-    (".github", "agents"),
-}
-
 _DOC_EXTENSIONS = {".md", ".txt", ".html", ".rst", ".xml"}
 
 _SOURCE_DIRS = {"docs", "context", "prompts", "instructions", "knowledge"}
@@ -103,47 +74,13 @@ _GLOBAL_ASSET_ROOTS = [
 ]
 
 
-def _relative_parts(path: Path, workspace: Path) -> tuple[str, ...] | None:
-    try:
-        return path.relative_to(workspace).parts
-    except ValueError:
-        return None
-
-
-def _under_root(parts: tuple[str, ...] | None, roots: set[tuple[str, str]]) -> bool:
-    return parts is not None and len(parts) >= 3 and parts[:2] in roots
-
-
 def _source_kind(path: Path, workspace: Path) -> SourceKind | None:
-    parts = _relative_parts(path, workspace)
-    if path.name.lower() == "skill.md" and _under_root(parts, _SKILL_ROOTS):
-        return "Skill"
-    if _under_root(parts, _PROMPT_ROOTS) and path.suffix.lower() == ".md":
-        return "PromptFile"
-    if _under_root(parts, _AGENT_DEFINITION_ROOTS) and path.suffix.lower() == ".md":
-        return "AgentDefinition"
-    if _is_agent_instruction(path, workspace):
-        return "AgentInstruction"
-    if path.suffix.lower() in _DOC_EXTENSIONS:
-        return "DocFile"
-    return None
+    from agenthound.discovery.source_registry import classify_source
 
-
-def _is_agent_instruction(path: Path, workspace: Path) -> bool:
-    """Return whether path is a recognized always-on instruction file."""
-    if path.name in _AGENT_INSTRUCTION_NAMES:
-        return True
-    parts = _relative_parts(path, workspace)
-    if parts == _COPILOT_INSTRUCTION_PATH:
-        return True
-    if not _under_root(parts, _RULE_ROOTS):
-        return False
-    assert parts is not None
-    if parts[:2] == (".cursor", "rules"):
-        return path.suffix.lower() == ".mdc"
-    if parts[:2] == (".github", "instructions"):
-        return path.name.lower().endswith(".instructions.md")
-    return path.suffix.lower() == ".md"
+    kind = classify_source(path, workspace)
+    if kind is not None:
+        return kind
+    return "DocFile" if path.suffix.lower() in _DOC_EXTENSIONS else None
 
 
 def _asset_kind(path: Path) -> AssetKind | None:
@@ -185,38 +122,27 @@ def _in_source_scope(root_path: Path, workspace: Path) -> bool:
 
 
 def find_source_files(workspace: Path) -> list[tuple[str, SourceKind]]:
-    """Return (path_str, source_kind) for IPI-injectable files in workspace."""
+    """Find registered behavior files and existing scoped general documents."""
+    from agenthound.discovery.behavior_files import excluded_path, plugin_component, safe_file
+
     results: list[tuple[str, SourceKind]] = []
-    seen: set[str] = set()
-
-    # Pass 1: walk all dirs (including hidden) for structured agent sources,
-    # skipping vendored/build trees.
-    for root, dirs, files in os.walk(workspace):
-        dirs[:] = [d for d in dirs if d not in _EXCLUDED_DIRS]
-        root_path = Path(root)
-        for fname in files:
-            fpath = root_path / fname
-            kind = _source_kind(fpath, workspace)
-            if kind is not None and kind != "DocFile":
-                key = str(fpath)
-                if key not in seen:
-                    results.append((key, kind))
-                    seen.add(key)
-
-    # Pass 2: walk non-hidden dirs for DocFile types
-    for root, dirs, files in os.walk(workspace):
-        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in _EXCLUDED_DIRS]
-        root_path = Path(root)
-        in_source_dir = root_path == workspace or _in_source_scope(root_path, workspace)
-        for fname in files:
-            fpath = root_path / fname
-            kind = _source_kind(fpath, workspace)
-            if in_source_dir and kind == "DocFile":
-                key = str(fpath)
-                if key not in seen:
-                    results.append((key, kind))
-                    seen.add(key)
-
+    for directory, dirs, files in os.walk(workspace, followlinks=False):
+        root = Path(directory)
+        dirs[:] = sorted(name for name in dirs
+                         if name not in _EXCLUDED_DIRS and not (root / name).is_symlink()
+                         and not excluded_path(root / name, workspace))
+        for name in sorted(files):
+            path = root / name
+            if not safe_file(path, workspace) or plugin_component(path, workspace, include_root=False):
+                continue
+            kind = _source_kind(path, workspace)
+            if kind is None:
+                continue
+            if kind == "DocFile":
+                relative = path.relative_to(workspace)
+                if any(part.startswith(".") for part in relative.parts[:-1]) or not _in_source_scope(root, workspace):
+                    continue
+            results.append((str(path), kind))
     return results
 
 

@@ -199,7 +199,7 @@ def test_docfile_influence_is_suspected(tmp_path):
 def test_instruction_does_not_influence_unsupported_agent(tmp_path):
     (tmp_path / "AGENTS.md").write_text("x")
     from agenthound.models.nodes import Agent
-    agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
+    agent = Agent(name="claude-desktop", platform="Claude Desktop", config_path=str(tmp_path))
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
     assert result.edges == []
 

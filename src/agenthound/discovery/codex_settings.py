@@ -6,11 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib  # type: ignore[import-not-found,no-redef]
-
+from agenthound.discovery.behavior_files import read_toml
 from agenthound.discovery.codex_builtin import codex_builtin_capabilities
 from agenthound.discovery.config_parser import _build_mcp_capability
 from agenthound.models.nodes import Agent, Capability
@@ -22,11 +18,9 @@ def codex_config_paths(workspace: Path) -> list[Path]:
 
 
 def read_codex_config(path: Path) -> dict[str, Any]:
-    try:
-        with path.open("rb") as config_file:
-            raw = tomllib.load(config_file)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ValueError(f"Cannot parse Codex config {path}: {exc}") from exc
+    raw = read_toml(path, path.parent)
+    if raw is None:
+        raise ValueError(f"Cannot parse Codex config {path}: expected readable TOML of at most 64 KiB")
     return raw
 
 
