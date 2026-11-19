@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
-from agenthound.discovery.workspace import find_asset_files
+from agenthound.discovery.git_metadata import inspect_repository
 from agenthound.discovery.builtin_read import read_access
+from agenthound.discovery.codex_builtin import codex_builtin_access
+from agenthound.discovery.workspace import find_asset_files
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Asset, Capability
 
@@ -81,22 +83,29 @@ def collect_assets(capabilities: list[Capability], workspace: Path, scope: str) 
     for path_str, kind in raw:
         fpath = Path(path_str)
         name = fpath.name or fpath.resolve().name or path_str
+        asset_path = str(fpath.resolve()) if kind == "SourceCode" else path_str
         # writable=True only for SourceCode; other assets (SSHKey, EnvFile, etc.) are
         # marked False here even though shell-capable agents could write them.
         # The CanAccess edge covers the reachability — writable reflects file intent.
+        git = inspect_repository(fpath) if kind == "SourceCode" else None
         asset = Asset(
             name=name,
             asset_kind=kind,
-            path=path_str,
+            path=asset_path,
             readable=True,
             writable=kind == "SourceCode",
+            git_remote_repository=git.remote_repository if git else "",
+            git_upstream_branch=git.upstream_branch if git else "",
+            git_head_commit=git.head_commit if git else "",
         )
         if asset.objectid not in seen:
             result.assets.append(asset)
             seen.add(asset.objectid)
             for cap in privileged:
                 if cap.cap_kind == "BuiltInTool":
-                    properties = read_access(cap, asset, workspace)
+                    properties = (codex_builtin_access(cap, asset, workspace)
+                                  if cap.file_evidence.startswith("builtin:codex:")
+                                  else read_access(cap, asset, workspace))
                     if properties is not None:
                         result.edges.append(Edge(start=cap.objectid, end=asset.objectid, kind="CanAccess", properties=properties))
                     continue

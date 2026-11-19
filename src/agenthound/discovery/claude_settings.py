@@ -37,7 +37,7 @@ def collect_claude_settings(paths: list[Path], workspace: Path) -> tuple[Agent, 
             continue
         seen.add(path.resolve())
         try:
-            raw = json.loads(path.read_text())
+            raw = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, ValueError) as exc:
             raise ValueError(f"Cannot parse config {path}: {exc}") from exc
         if not isinstance(raw, dict):

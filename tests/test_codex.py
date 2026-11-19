@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from click.testing import CliRunner
 
 from agenthound.cli import cli
@@ -15,7 +16,7 @@ def test_codex_explicit_toml_config(tmp_path):
     config.write_text('[mcp_servers.filesystem]\ncommand = "npx"\nargs = ["-y", "@modelcontextprotocol/server-filesystem", "/demo"]\n[mcp_servers.filesystem.env]\nSECRET = "never-export"\n')
     agent, caps = parse_config(config)
     assert agent.name == "codex"
-    assert len(caps) == 1
+    assert len(caps) == 2
     assert caps[0].name == "filesystem"
     assert caps[0].file_access == "confirmed"
     assert caps[0].allowed_paths is None
@@ -38,8 +39,8 @@ def test_codex_discovery_merges_user_and_project(tmp_path, monkeypatch):
     result = collect_from_configs([path for path in found if path in {user_config, project_config}], workspace=workspace)
     codex_agents = [agent for agent in result.agents if agent.name == "codex"]
     assert len(codex_agents) == 1
-    assert {cap.name for cap in result.capabilities} == {"docs", "filesystem"}
-    assert len(result.edges) == 2
+    assert {cap.name for cap in result.capabilities} == {"docs", "filesystem", "Read"}
+    assert len(result.edges) == 3
 
 
 def test_codex_disabled_and_restricted_servers(tmp_path):
@@ -47,7 +48,7 @@ def test_codex_disabled_and_restricted_servers(tmp_path):
     config.parent.mkdir()
     config.write_text('[mcp_servers.off]\nenabled = false\ncommand = "npx"\nargs = ["-y", "@modelcontextprotocol/server-filesystem", "/demo"]\n[mcp_servers.limited]\ncommand = "npx"\nargs = ["-y", "@modelcontextprotocol/server-filesystem", "/demo"]\nenabled_tools = ["list_directory"]\n')
     _, caps = parse_config(config)
-    assert [cap.name for cap in caps] == ["limited"]
+    assert [cap.name for cap in caps] == ["limited", "Read"]
     assert caps[0].file_access == "suspected"
 
 
@@ -74,3 +75,44 @@ def test_codex_cli_export_omits_env_values(tmp_path):
     assert "never-export-arg" not in output.read_text()
     graph = json.loads(output.read_text())["graph"]
     assert any(node["properties"]["name"] == "CODEX" for node in graph["nodes"])
+
+
+def test_codex_builtin_read_links_source_to_workspace_asset(tmp_path):
+    from agenthound.collectors.assets import collect_assets
+
+    config = tmp_path / ".codex/config.toml"
+    config.parent.mkdir()
+    config.write_text("", encoding="utf-8")
+    (tmp_path / "README.md").write_text("synthetic input", encoding="utf-8")
+    (tmp_path / ".env").write_text("SYNTHETIC=placeholder", encoding="utf-8")
+    result = collect_from_configs([config], workspace=tmp_path)
+    read = next(c for c in result.capabilities if c.name == "Read")
+    assert read.cap_kind == "BuiltInTool"
+    assert read.file_access == "suspected"
+    assert read.shell_exec == "none"
+    sources = collect_sources(result.agents[0], tmp_path, "workspace")
+    assets = collect_assets(result.capabilities, tmp_path, "workspace")
+    assert any(e.kind == "Influences" for e in sources.edges)
+    assert any(e.kind == "HasCapability" and e.end == read.objectid for e in result.edges)
+    assert any(e.kind == "CanAccess" and e.start == read.objectid for e in assets.edges)
+    assert all(e.properties["confidence"] == "suspected" for e in assets.edges)
+
+
+@pytest.mark.parametrize("mode,disabled,has_shell", [
+    ("workspace-write", False, True), ("danger-full-access", False, True),
+    ("read-only", False, False), ("workspace-write", True, False),
+])
+def test_codex_shell_requires_explicit_configuration(tmp_path, mode, disabled, has_shell):
+    from agenthound.discovery.codex_builtin import codex_builtin_access
+    from agenthound.discovery.codex_settings import collect_codex_settings
+    from agenthound.models.nodes import Asset
+
+    config = tmp_path / "config.toml"
+    config.write_text(f'sandbox_mode = "{mode}"\n[features]\nshell_tool = {str(not disabled).lower()}\n', encoding="utf-8")
+    _, caps = collect_codex_settings([config], tmp_path)
+    assert any(c.name == "Shell" for c in caps) is has_shell
+    if has_shell:
+        shell = next(c for c in caps if c.name == "Shell")
+        assert shell.shell_exec == "suspected"
+        outside = Asset(name="outside", asset_kind="EnvFile", path=str(tmp_path.parent / ".env"))
+        assert codex_builtin_access(shell, outside, tmp_path) is None

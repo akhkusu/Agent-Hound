@@ -180,8 +180,8 @@ def _build_mcp_capability(name: str, config: dict[str, Any], agent_scope: str) -
         # Only the server name and what actually executes (command basename +
         # the launched package) seed keyword detection. Path/option-value args
         # are data — a "/home/git/cache" arg must not imply git_write.
-        tokens = _tokenize(name, *identity_tokens(command, args))
         identities = identity_tokens(command, args)
+        tokens = _tokenize(name, *identities)
         if identities:
             fields["package_name"] = identities[-1]
         if shell_hits := _SHELL_TOKENS & tokens:
@@ -288,7 +288,7 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
         from agenthound.discovery.codex_settings import collect_codex_settings
         return collect_codex_settings([config_path], config_path.parent.parent)
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8-sig") as f:
             raw: dict[str, Any] = json.load(f)
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Cannot parse config {config_path}: {exc}") from exc

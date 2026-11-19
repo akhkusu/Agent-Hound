@@ -19,7 +19,7 @@ def test_find_doc_files(tmp_path):
     (tmp_path / "page.html").write_text("<html/>")
     results = find_source_files(tmp_path)
     names = {Path(p).name for p, _ in results}
-    assert "README.md" not in names
+    assert "README.md" in names
     assert "notes.txt" in names
     assert "page.html" in names
 
@@ -52,7 +52,7 @@ def test_source_kind_agent_instruction(tmp_path):
 
 
 def test_source_kind_doc_file(tmp_path):
-    (tmp_path / "notes.md").write_text("x")
+    (tmp_path / "README.md").write_text("x")
     results = find_source_files(tmp_path)
     assert any(kind == "DocFile" for _, kind in results)
 

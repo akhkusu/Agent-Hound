@@ -23,12 +23,12 @@ def test_collect_sources_creates_influences_edges(tmp_path):
         assert edge.end == agent.objectid
 
 
-def test_readme_is_not_a_source(tmp_path):
+def test_readme_is_a_source(tmp_path):
     (tmp_path / "README.md").write_text("# readme")
     agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
-    assert result.sources == []
-    assert result.edges == []
+    assert [source.source_kind for source in result.sources] == ["DocFile"]
+    assert [edge.kind for edge in result.edges] == ["Influences"]
 
 
 def test_skill_only_influences_matching_agent(tmp_path):

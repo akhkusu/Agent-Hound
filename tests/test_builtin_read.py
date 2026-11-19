@@ -114,8 +114,8 @@ def test_cli_real_graph(tmp_path, monkeypatch):
     result = CliRunner().invoke(cli, ['--config', str(config), '--workspace', str(workspace), '--scope', 'workspace', '-o', str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())['graph']
-    assert len(graph['nodes']) == 4
-    assert [e['kind'] for e in graph['edges']].count('Influences') == 1
+    assert len(graph['nodes']) == 5
+    assert [e['kind'] for e in graph['edges']].count('Influences') == 2
     edge = next(e for e in graph['edges'] if e['kind'] == 'CanAccess')
     assert edge['properties']['confidence'] == 'suspected'
     assert 'preapproval:Read' in edge['properties']['evidence']

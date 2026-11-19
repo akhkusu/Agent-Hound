@@ -47,7 +47,7 @@ _SOURCE_DIRS = {"docs", "context", "prompts", "instructions", "knowledge"}
 _EXCLUDED_DIRS = {
     ".git", "__pycache__", "node_modules", ".venv", "venv", "vendor",
     "dist", "build", ".tox", ".mypy_cache", ".pytest_cache", "site-packages",
-    ".next", "target",
+    ".next", "target", ".local",
 }
 
 # .env variants that are templates/samples, not real secrets.
@@ -124,8 +124,6 @@ def _source_kind(path: Path, workspace: Path) -> SourceKind | None:
         return "AgentDefinition"
     if _is_agent_instruction(path, workspace):
         return "AgentInstruction"
-    if path.stem.lower() == "readme":
-        return None
     if path.suffix.lower() in _DOC_EXTENSIONS:
         return "DocFile"
     return None

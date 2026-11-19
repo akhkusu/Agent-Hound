@@ -17,7 +17,7 @@ def claude_mcp_paths(workspace: Path) -> list[Path]:
 
 def load_object(path: Path) -> dict[str, Any]:
     try:
-        raw = json.loads(path.read_text())
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as exc:
         raise ValueError(f'Cannot parse config {path}: {exc}') from exc
     if not isinstance(raw, dict):

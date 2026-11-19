@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from agenthound.collectors.base import CollectionResult
+from agenthound.discovery.git_metadata import inspect_source
 from agenthound.discovery.skills import find_user_skills, skill_info
 from agenthound.discovery.workspace import find_source_files
 from agenthound.models.edges import Edge
-from agenthound.models.nodes import Agent, Source
+from agenthound.models.nodes import Agent, Asset, Source
 
 # Instruction files a specific agent reads automatically. A file mapped here
 # only influences its matching agents (confirmed); an unmapped instruction
@@ -166,6 +167,14 @@ def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResu
     for path_str, kind in raw:
         fpath = Path(path_str)
         metadata = skill_info(fpath, "project", "project") if kind == "Skill" else None
+        git = inspect_source(fpath)
+        repository_asset_id = ""
+        if git.repository_path:
+            repository_asset_id = Asset(
+                name=Path(git.repository_path).name,
+                asset_kind="SourceCode",
+                path=git.repository_path,
+            ).objectid
         source = Source(
             name=f"Skill: {metadata.name}" if metadata else _source_name(fpath, kind, workspace),
             source_kind=kind,
@@ -174,6 +183,10 @@ def collect_sources(agent: Agent, workspace: Path, scope: str) -> CollectionResu
             description=metadata.description if metadata else "",
             source_scope=metadata.scope if metadata else "",
             discovery_status="available" if metadata else "",
+            git_repository_asset_id=repository_asset_id,
+            git_relative_path=git.relative_path,
+            git_committed=git.committed,
+            git_clean=git.clean,
         )
         if source.objectid not in seen:
             result.sources.append(source)

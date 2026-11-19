@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "tenant_id": "example-tenant",
+  "observed_at": "2026-11-01T09:00:00Z",
+  "evidence_source": "synthetic",
+  "principals": [
+    {"id": "user-editor", "name": "ORION Editor", "kind": "user"},
+    {"id": "user-executive", "name": "ORION Executive", "kind": "user"},
+    {"id": "group-members", "name": "ORION Members", "kind": "group"}
+  ],
+  "memberships": [
+    {"member_id": "user-editor", "group_id": "group-members", "evidence": "Synthetic lab membership"},
+    {"member_id": "user-executive", "group_id": "group-members", "evidence": "Synthetic lab membership"}
+  ],
+  "documents": [
+    {"id": "orion-overview", "name": "Project_ORION_概要.docx", "web_url": "https://example.sharepoint.com/sites/lab/ORION/overview.docx", "acl_complete": true,
+     "grants": [{"principal_id": "group-members", "roles": ["read"], "inheritance": "inherited", "evidence": "Synthetic lab ACL"}]},
+    {"id": "orion-minutes", "name": "Project_ORION_定例議事録.docx", "web_url": "https://example.sharepoint.com/sites/lab/ORION/minutes.docx", "acl_complete": true,
+     "grants": [{"principal_id": "group-members", "roles": ["write"], "inheritance": "inherited", "evidence": "Synthetic lab ACL"}]},
+    {"id": "orion-acquisition", "name": "Project_ORION_買収検討.docx", "web_url": "https://example.sharepoint.com/sites/lab/ORION/acquisition.docx", "classification": "management-restricted", "acl_complete": true,
+     "grants": [{"principal_id": "user-executive", "roles": ["read"], "inheritance": "direct", "evidence": "Synthetic lab ACL"}]},
+    {"id": "orion-pricing", "name": "Project_ORION_顧客別価格.xlsx", "web_url": "https://example.sharepoint.com/sites/lab/ORION/pricing.xlsx", "classification": "sales-restricted", "acl_complete": true,
+     "grants": [{"principal_id": "user-executive", "roles": ["read"], "inheritance": "direct", "evidence": "Synthetic lab ACL"}]},
+    {"id": "orion-staffing", "name": "Project_ORION_人員計画.docx", "web_url": "https://example.sharepoint.com/sites/lab/ORION/staffing.docx", "classification": "hr-restricted", "acl_complete": true,
+     "grants": [{"principal_id": "user-executive", "roles": ["read"], "inheritance": "direct", "evidence": "Synthetic lab ACL"}]}
+  ],
+  "agents": [
+    {"id": "executive-copilot", "name": "ORION Executive Copilot", "principal_id": "user-executive", "evidence": "Synthetic lab work-account binding",
+     "references": [{"document_id": "orion-minutes", "mode": "configured", "evidence": "Synthetic lab knowledge-source configuration; retrieval unverified"}]}
+  ]
+}
