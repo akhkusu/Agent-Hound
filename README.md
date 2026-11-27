@@ -24,10 +24,8 @@ Built on the [SpecterOps OpenGraph](https://specterops.io/opengraph/) specificat
 Agent-Hound models AI agent environments as five node types connected by five core edge types, then exports the graph to BloodHound OpenGraph:
 
 <p align="center">
-  <a href="examples/blackhat-arsenal/figures/agenthound-bloodhound-readme.png"><img src="examples/blackhat-arsenal/figures/agenthound-bloodhound-readme.png" alt="BloodHound CE view showing Agent-Hound sources, built-in tools, MCP servers and their advertised tools, and local assets" width="100%"/></a>
+  <a href="img/agenthound-bloodhound.png"><img src="img/agenthound-bloodhound.png" alt="BloodHound CE view showing Agent-Hound sources, built-in tools, MCP servers and their advertised tools, and local assets" width="100%"/></a>
 </p>
-
-<p align="center"><a href="examples/blackhat-arsenal/README.md">Reproduce the representative sample</a></p>
 
 | Node | Role | Examples |
 | :--- | :--- | :--- |
