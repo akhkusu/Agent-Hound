@@ -25,12 +25,6 @@ docs/superpowers/
 .claude/
 *.claude.json
 
-# Tracked Black Hat Arsenal sample fixtures
-!examples/blackhat-arsenal/project-template/CLAUDE.md
-!examples/blackhat-arsenal/project-template/.claude/
-!examples/blackhat-arsenal/project-template/.claude/**
-!examples/blackhat-arsenal/claude-config/.claude.json
-
 # Editor
 .vscode/settings.json
 .idea/
