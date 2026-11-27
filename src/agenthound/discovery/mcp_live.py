@@ -553,6 +553,7 @@ def _advertisement_result(
             cap_kind="MCPTool",
             agent_scope=server.objectid,
             tool_name=tool_name,
+            mcp_server_name=server.name,
             profile_id=server.profile_id,
             claims=claims,
             identity_confidence=server.identity_confidence,

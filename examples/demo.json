@@ -19,8 +19,10 @@
         "id": "source-inst-01",
         "kinds": ["Source"],
         "properties": {
-          "name": "CLAUDE.MD",
+          "name": "CLAUDE.md",
           "displayname": "CLAUDE.md",
+          "internal_name": "CLAUDE.md",
+          "filename": "CLAUDE.md",
           "source_kind": "AgentInstruction",
           "path": "CLAUDE.md",
           "is_external": false
@@ -30,8 +32,10 @@
         "id": "source-inst-02",
         "kinds": ["Source"],
         "properties": {
-          "name": "AGENTS.MD",
+          "name": "AGENTS.md",
           "displayname": "AGENTS.md",
+          "internal_name": "AGENTS.md",
+          "filename": "AGENTS.md",
           "source_kind": "AgentInstruction",
           "path": "AGENTS.md",
           "is_external": false
@@ -41,8 +45,10 @@
         "id": "source-doc-01",
         "kinds": ["Source"],
         "properties": {
-          "name": "README.MD",
+          "name": "README.md",
           "displayname": "README.md",
+          "internal_name": "README.md",
+          "filename": "README.md",
           "source_kind": "DocFile",
           "path": "README.md",
           "is_external": false
@@ -52,8 +58,10 @@
         "id": "source-doc-02",
         "kinds": ["Source"],
         "properties": {
-          "name": "RUNBOOK.MD",
+          "name": "runbook.md",
           "displayname": "runbook.md",
+          "internal_name": "runbook.md",
+          "filename": "runbook.md",
           "source_kind": "DocFile",
           "path": "docs/runbook.md",
           "is_external": false
@@ -66,6 +74,7 @@
         "properties": {
           "name": "BASH-HOOK",
           "displayname": "bash-hook",
+          "internal_name": "bash-hook",
           "cap_kind": "ShellHook",
           "has_shell": true,
           "command": "bash"
@@ -75,8 +84,10 @@
         "id": "cap-fs000002",
         "kinds": ["Capability"],
         "properties": {
-          "name": "FILESYSTEM",
-          "displayname": "filesystem",
+          "name": "MCP: filesystem",
+          "displayname": "MCP: filesystem",
+          "internal_name": "filesystem",
+          "mcp_server_name": "filesystem",
           "cap_kind": "MCPServer",
           "has_shell": false,
           "command": "npx -y @modelcontextprotocol/server-filesystem /home/dev",
@@ -87,8 +98,10 @@
         "id": "cap-gh000003",
         "kinds": ["Capability"],
         "properties": {
-          "name": "GITHUB",
-          "displayname": "github",
+          "name": "MCP: github",
+          "displayname": "MCP: github",
+          "internal_name": "github",
+          "mcp_server_name": "github",
           "cap_kind": "MCPServer",
           "has_shell": false,
           "command": "npx -y @modelcontextprotocol/server-github",
@@ -99,8 +112,10 @@
         "id": "cap-re000004",
         "kinds": ["Capability"],
         "properties": {
-          "name": "REMOTE-API",
-          "displayname": "remote-api",
+          "name": "MCP: remote-api",
+          "displayname": "MCP: remote-api",
+          "internal_name": "remote-api",
+          "mcp_server_name": "remote-api",
           "cap_kind": "MCPServer",
           "has_shell": false,
           "transport": "sse",

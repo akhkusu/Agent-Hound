@@ -33,8 +33,47 @@ def test_source_to_opengraph():
     s = Source(name="README.md", source_kind="DocFile", path="/srv/README.md", is_external=False)
     node = s.to_opengraph()
     assert node["kinds"] == ["Source"]
+    assert node["properties"]["name"] == "README.md"
+    assert node["properties"]["displayname"] == "README.md"
+    assert node["properties"]["filename"] == "README.md"
+    assert node["properties"]["internal_name"] == "README.md"
     assert node["properties"]["source_kind"] == "DocFile"
     assert node["properties"]["is_external"] is False
+
+
+def test_file_source_uses_filename_without_changing_identity_or_type():
+    source = Source(
+        name="Claude Agent: reviewer",
+        source_kind="AgentDefinition",
+        path=r"C:\project\.claude\agents\reviewer.md",
+        platform="Claude Code",
+    )
+    original_id = source.objectid
+
+    node = source.to_opengraph()
+
+    assert node["id"] == original_id
+    assert node["kinds"] == ["Source"]
+    assert node["properties"]["name"] == "reviewer.md"
+    assert node["properties"]["displayname"] == "reviewer.md"
+    assert node["properties"]["internal_name"] == "Claude Agent: reviewer"
+    assert node["properties"]["source_kind"] == "AgentDefinition"
+    assert node["properties"]["platform"] == "Claude Code"
+    assert node["properties"]["path"] == source.path
+
+
+def test_non_file_source_keeps_semantic_name():
+    source = Source(
+        name="project-files: private docs",
+        source_kind="MCPResource",
+        path="https://example.test/docs",
+    )
+
+    node = source.to_opengraph()
+
+    assert node["properties"]["name"] == "PROJECT-FILES: PRIVATE DOCS"
+    assert node["properties"]["displayname"] == "project-files: private docs"
+    assert "filename" not in node["properties"]
 
 
 def test_capability_has_shell_flag():
@@ -48,8 +87,45 @@ def test_capability_to_opengraph_with_command():
     c = Capability(name="filesystem", cap_kind="MCPServer", command="npx -y server-fs", transport="stdio")
     node = c.to_opengraph()
     assert node["kinds"] == ["Capability"]
+    assert node["properties"]["name"] == "MCP: filesystem"
+    assert node["properties"]["displayname"] == "MCP: filesystem"
+    assert node["properties"]["internal_name"] == "filesystem"
+    assert node["properties"]["mcp_server_name"] == "filesystem"
     assert node["properties"]["command"] == "npx -y server-fs"
     assert node["properties"]["transport"] == "stdio"
+
+
+def test_capability_labels_distinguish_mcp_server_tool_and_builtin():
+    mcp_tool = Capability(
+        name="project-files: read_file",
+        cap_kind="MCPTool",
+        tool_name="read_file",
+        mcp_server_name="project-files",
+    )
+    builtin = Capability(name="Bash", cap_kind="BuiltInTool")
+
+    tool_props = mcp_tool.to_opengraph()["properties"]
+    builtin_props = builtin.to_opengraph()["properties"]
+
+    assert tool_props["name"] == "MCP Tool: read_file"
+    assert tool_props["displayname"] == "MCP Tool: read_file"
+    assert tool_props["internal_name"] == "project-files: read_file"
+    assert tool_props["mcp_server_name"] == "project-files"
+    assert tool_props["tool_name"] == "read_file"
+    assert builtin_props["name"] == "Bash"
+    assert builtin_props["displayname"] == "Bash"
+    assert not builtin_props["name"].startswith("MCP:")
+    assert "mcp_server_name" not in builtin_props
+
+
+def test_same_mcp_server_name_stays_distinct_per_agent_without_truncation():
+    name = "project-files-with-a-long-untruncated-name"
+    first = Capability(name=name, cap_kind="MCPServer", agent_scope="agent-1")
+    second = Capability(name=name, cap_kind="MCPServer", agent_scope="agent-2")
+
+    assert first.objectid != second.objectid
+    assert first.to_opengraph()["properties"]["name"] == f"MCP: {name}"
+    assert second.to_opengraph()["properties"]["name"] == f"MCP: {name}"
 
 
 def test_asset_objectid_from_path():

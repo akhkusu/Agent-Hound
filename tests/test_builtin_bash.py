@@ -61,18 +61,18 @@ def test_scan_merges_bash_allow_without_changing_read_only_demo(tmp_path, monkey
     runner = CliRunner()
     result = runner.invoke(cli, ["scan", "-w", str(project), "--scope", "workspace", "-o", str(output)])
     assert result.exit_code == 0, result.output
-    assert not any(node["properties"]["name"] == "BASH" for node in json.loads(output.read_text())["graph"]["nodes"])
+    assert not any(node["properties"]["name"] == "Bash" for node in json.loads(output.read_text())["graph"]["nodes"])
 
     shared.write_text(json.dumps({"permissions": {"allow": ["Bash"]}}))
     result = runner.invoke(cli, ["scan", "-w", str(project), "--scope", "workspace", "-o", str(output)])
     assert result.exit_code == 0, result.output
     graph = json.loads(output.read_text())["graph"]
-    assert {node["properties"]["name"] for node in graph["nodes"]} >= {"READ", "BASH"}
+    assert {node["properties"]["name"] for node in graph["nodes"]} >= {"Read", "Bash"}
     assert any(node["properties"].get("impact_kind") == "SystemTakeover" for node in graph["nodes"])
     assert all(edge["properties"].get("confidence") == "suspected" for edge in graph["edges"] if edge["kind"] == "Triggers")
 
-    instructions = next(node for node in graph["nodes"] if node["properties"]["name"] == "CLAUDE.MD")
+    instructions = next(node for node in graph["nodes"] if node["properties"]["name"] == "CLAUDE.md")
     agent = next(node for node in graph["nodes"] if node["properties"]["name"] == "CLAUDE-CODE")
-    bash = next(node for node in graph["nodes"] if node["properties"]["name"] == "BASH")
+    bash = next(node for node in graph["nodes"] if node["properties"]["name"] == "Bash")
     assert any(edge["kind"] == "Influences" and edge["start"]["value"] == instructions["id"] and edge["end"]["value"] == agent["id"] for edge in graph["edges"])
     assert any(edge["kind"] == "HasCapability" and edge["start"]["value"] == agent["id"] and edge["end"]["value"] == bash["id"] for edge in graph["edges"])

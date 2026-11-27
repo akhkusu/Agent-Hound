@@ -93,7 +93,8 @@ def test_real_scan_outputs_safe_semantic_graph_and_verbose_dimensions(tmp_path, 
     assert "DocFile" not in kinds
     assert all(source["content_exported"] is False for source in sources.values())
     role = next(source for source in sources.values() if source["path"].endswith(".codex/roles/review.toml"))
-    assert role["displayname"] == "Codex Agent: review"
+    assert role["displayname"] == "review.toml"
+    assert role["internal_name"] == "Codex Agent: review"
     assert not any("unrelated" in source["path"] for source in sources.values())
     influences = [edge for edge in graph["edges"] if edge["kind"] == "Influences"]
     for edge in influences:
