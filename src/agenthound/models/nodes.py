@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import PurePosixPath
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
@@ -40,6 +41,22 @@ AssetKind = Literal[
 ]
 ImpactKind = Literal["Exfiltration", "SupplyChainContamination", "SystemTakeover"]
 
+_FILE_SOURCE_KINDS = frozenset(
+    {
+        "DocFile",
+        "Skill",
+        "PromptFile",
+        "AgentDefinition",
+        "AgentInstruction",
+        "Memory",
+        "RuntimeConfiguration",
+        "HookScript",
+        "PluginManifest",
+        "OutputStyle",
+        "ContextVisibility",
+    }
+)
+
 # Legacy dimension confidence is separate from identity, implementation,
 # advertisement and effective-access confidence. Exact package evidence only
 # confirms the implementation operation; heuristic dimensions remain suspected.
@@ -49,6 +66,28 @@ def _hash_id(prefix: str, *parts: str) -> str:
     content = "\x00".join(parts)
     h = hashlib.sha256(content.encode()).hexdigest()[:8]
     return f"{prefix}-{h}"
+
+
+def _path_filename(path: str) -> str:
+    """Return a filename for POSIX or Windows paths without touching the file."""
+    normalized = path.rstrip("/\\").replace("\\", "/")
+    return PurePosixPath(normalized).name if normalized else ""
+
+
+def _source_display_name(source: Source) -> str:
+    if source.source_kind in _FILE_SOURCE_KINDS:
+        return _path_filename(source.path) or source.name
+    return source.name
+
+
+def _capability_display_name(capability: Capability) -> str:
+    if capability.cap_kind == "MCPServer":
+        return f"MCP: {capability.name}"
+    if capability.cap_kind == "MCPTool":
+        return f"MCP Tool: {capability.tool_name or capability.name}"
+    if capability.cap_kind == "BuiltInTool":
+        return capability.tool_name or capability.name
+    return capability.name
 
 
 class Agent(BaseModel):
@@ -123,14 +162,23 @@ class Source(BaseModel):
         return _hash_id("source", self.source_kind, self.path)
 
     def to_opengraph(self) -> dict[str, Any]:
+        display_name = _source_display_name(self)
+        exported_name = (
+            display_name
+            if self.source_kind in _FILE_SOURCE_KINDS
+            else self.name.upper()
+        )
         properties: dict[str, Any] = {
-            "name": self.name.upper(),
-            "displayname": self.name,
+            "name": exported_name,
+            "displayname": display_name,
+            "internal_name": self.name,
             "source_kind": self.source_kind,
             "path": self.path,
             "is_external": self.is_external,
             "content_exported": False,
         }
+        if self.source_kind in _FILE_SOURCE_KINDS:
+            properties["filename"] = display_name
         if self.git_repository_asset_id:
             properties.update(
                 git_repository_asset_id=self.git_repository_asset_id,
@@ -215,6 +263,7 @@ class Capability(BaseModel):
     effective_access_confidence: Confidence = "none"
     claims: tuple[CapabilityClaim, ...] = ()
     tool_name: str = ""
+    mcp_server_name: str = ""
     advertised_tool_names: tuple[str, ...] = ()
     tool_allowlist_configured: bool = False
     package_name: str = ""
@@ -260,9 +309,16 @@ class Capability(BaseModel):
         return _hash_id("cap", self.name, self.cap_kind, self.agent_scope)
 
     def to_opengraph(self) -> dict[str, Any]:
+        display_name = _capability_display_name(self)
+        exported_name = (
+            display_name
+            if self.cap_kind in {"MCPServer", "MCPTool", "BuiltInTool"}
+            else self.name.upper()
+        )
         props: dict[str, Any] = {
-            "name": self.name.upper(),
-            "displayname": self.name,
+            "name": exported_name,
+            "displayname": display_name,
+            "internal_name": self.name,
             "cap_kind": self.cap_kind,
             "has_shell": self.has_shell,
             "shell_exec": self.shell_exec,
@@ -283,6 +339,7 @@ class Capability(BaseModel):
             ("profile_id", self.profile_id),
             ("profile_status", self.profile_status),
             ("tool_name", self.tool_name),
+            ("mcp_server_name", self.mcp_server_name),
             ("package_name", self.package_name),
             ("endpoint", self.endpoint),
             ("auth_kind", self.auth_kind if self.auth_kind != "none" else ""),
@@ -323,6 +380,8 @@ class Capability(BaseModel):
             if hint_value is not None:
                 props[hint_key] = hint_value
         if self.cap_kind in {"MCPServer", "MCPTool"}:
+            if self.cap_kind == "MCPServer":
+                props["mcp_server_name"] = self.name
             for key in (
                 "identity_confidence",
                 "implementation_confidence",

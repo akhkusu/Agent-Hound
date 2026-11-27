@@ -58,6 +58,33 @@ def test_edge_has_start_end_kind():
         assert edge["end"]["match_by"] == "id"
 
 
+def test_display_labels_do_not_change_node_ids_or_edge_references():
+    result = _make_result()
+    expected_ids = {
+        node.objectid
+        for collection in (
+            result.agents,
+            result.sources,
+            result.capabilities,
+            result.assets,
+            result.impacts,
+        )
+        for node in collection
+    }
+    expected_edges = {
+        (edge.start, edge.end, edge.kind)
+        for edge in result.edges
+    }
+
+    graph = build_opengraph(result)["graph"]
+
+    assert {node["id"] for node in graph["nodes"]} == expected_ids
+    assert {
+        (edge["start"]["value"], edge["end"]["value"], edge["kind"])
+        for edge in graph["edges"]
+    } == expected_edges
+
+
 def test_write_opengraph_creates_valid_json(tmp_path):
     out = tmp_path / "output.json"
     og = build_opengraph(_make_result())

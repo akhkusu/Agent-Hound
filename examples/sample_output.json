@@ -22,8 +22,10 @@
           "Source"
         ],
         "properties": {
-          "name": "CLAUDE.MD",
+          "name": "CLAUDE.md",
           "displayname": "CLAUDE.md",
+          "internal_name": "CLAUDE.md",
+          "filename": "CLAUDE.md",
           "source_kind": "AgentInstruction",
           "path": "CLAUDE.md",
           "is_external": false
@@ -35,8 +37,10 @@
           "Source"
         ],
         "properties": {
-          "name": "QUERY.MD",
+          "name": "query.md",
           "displayname": "query.md",
+          "internal_name": "query.md",
+          "filename": "query.md",
           "source_kind": "DocFile",
           "path": "query.md",
           "is_external": false
@@ -48,8 +52,10 @@
           "Source"
         ],
         "properties": {
-          "name": "README.MD",
+          "name": "README.md",
           "displayname": "README.md",
+          "internal_name": "README.md",
+          "filename": "README.md",
           "source_kind": "DocFile",
           "path": "README.md",
           "is_external": false
@@ -61,8 +67,10 @@
           "Source"
         ],
         "properties": {
-          "name": "CHANGELOG.MD",
+          "name": "CHANGELOG.md",
           "displayname": "CHANGELOG.md",
+          "internal_name": "CHANGELOG.md",
+          "filename": "CHANGELOG.md",
           "source_kind": "DocFile",
           "path": "CHANGELOG.md",
           "is_external": false
@@ -74,8 +82,10 @@
           "Source"
         ],
         "properties": {
-          "name": "2026-04-28-AGENT-HOUND.MD",
+          "name": "2026-04-28-agent-hound.md",
           "displayname": "2026-04-28-agent-hound.md",
+          "internal_name": "2026-04-28-agent-hound.md",
+          "filename": "2026-04-28-agent-hound.md",
           "source_kind": "DocFile",
           "path": "docs/superpowers/plans/2026-04-28-agent-hound.md",
           "is_external": false
@@ -87,8 +97,10 @@
           "Source"
         ],
         "properties": {
-          "name": "2026-04-28-AGENT-HOUND-DESIGN.MD",
+          "name": "2026-04-28-agent-hound-design.md",
           "displayname": "2026-04-28-agent-hound-design.md",
+          "internal_name": "2026-04-28-agent-hound-design.md",
+          "filename": "2026-04-28-agent-hound-design.md",
           "source_kind": "DocFile",
           "path": "docs/superpowers/specs/2026-04-28-agent-hound-design.md",
           "is_external": false
@@ -100,8 +112,10 @@
           "Capability"
         ],
         "properties": {
-          "name": "FILESYSTEM",
-          "displayname": "filesystem",
+          "name": "MCP: filesystem",
+          "displayname": "MCP: filesystem",
+          "internal_name": "filesystem",
+          "mcp_server_name": "filesystem",
           "cap_kind": "MCPServer",
           "has_shell": false,
           "command": "npx -y @modelcontextprotocol/server-filesystem /home/user/docs",
@@ -114,8 +128,10 @@
           "Capability"
         ],
         "properties": {
-          "name": "GITHUB",
-          "displayname": "github",
+          "name": "MCP: github",
+          "displayname": "MCP: github",
+          "internal_name": "github",
+          "mcp_server_name": "github",
           "cap_kind": "MCPServer",
           "has_shell": false,
           "command": "npx -y @modelcontextprotocol/server-github",
@@ -128,8 +144,10 @@
           "Capability"
         ],
         "properties": {
-          "name": "REMOTE",
-          "displayname": "remote",
+          "name": "MCP: remote",
+          "displayname": "MCP: remote",
+          "internal_name": "remote",
+          "mcp_server_name": "remote",
           "cap_kind": "MCPServer",
           "has_shell": false,
           "transport": "sse"
