@@ -76,7 +76,9 @@ def test_real_scan_outputs_safe_semantic_graph_and_verbose_dimensions(tmp_path, 
     project, home = populate_workspace(tmp_path)
     isolate_environment(home, monkeypatch)
     output = tmp_path / "graph.json"
-    result = CliRunner().invoke(cli, ["scan", "-w", str(project), "--scope", "all", "-o", str(output), "-v"])
+    result = CliRunner().invoke(cli, [
+        "scan", "-w", str(project), "--scope", "all", "-o", str(output), "-v",
+    ])
     assert result.exit_code == 0, result.output
     text = output.read_text(encoding="utf-8")
     assert "NEVER_EXPORT" not in text
@@ -87,7 +89,8 @@ def test_real_scan_outputs_safe_semantic_graph_and_verbose_dimensions(tmp_path, 
     assert all(edge["start"]["value"] in ids and edge["end"]["value"] in ids for edge in graph["edges"])
     sources = {node["id"]: node["properties"] for node in graph["nodes"] if "Source" in node["kinds"]}
     kinds = {node["source_kind"] for node in sources.values()}
-    assert {"DocFile", "AgentInstruction", "Skill", "Memory", "RuntimeConfiguration", "HookScript", "PluginManifest", "ContextVisibility"} <= kinds
+    assert {"AgentInstruction", "Skill", "Memory", "RuntimeConfiguration", "HookScript", "PluginManifest", "ContextVisibility"} <= kinds
+    assert "DocFile" not in kinds
     assert all(source["content_exported"] is False for source in sources.values())
     role = next(source for source in sources.values() if source["path"].endswith(".codex/roles/review.toml"))
     assert role["displayname"] == "Codex Agent: review"

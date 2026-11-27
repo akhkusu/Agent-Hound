@@ -126,7 +126,22 @@ def test_acl_and_influence_have_separate_evidence(snapshot):
 
 def test_no_source_reference_means_no_influence(snapshot):
     snapshot["agents"][0]["references"] = []
-    assert not any(e["kind"] == "Influences" for e in graph(snapshot)["edges"])
+    result = graph(snapshot)
+    assert not any(e["kind"] == "Influences" for e in result["edges"])
+    assert not any("Source" in node["kinds"] for node in result["nodes"])
+
+
+def test_only_referenced_documents_are_sources(snapshot):
+    result = graph(snapshot)
+    source_names = {
+        node["properties"]["displayname"]
+        for node in result["nodes"]
+        if "Source" in node["kinds"]
+    }
+    assert source_names == {"Minutes.docx"}
+    influence = next(edge for edge in result["edges"] if edge["kind"] == "Influences")
+    assert influence["properties"]["activation"] == "configured"
+    assert influence["properties"]["influence_channel"] == "document_context"
 
 
 def test_configured_source_cannot_override_acl(snapshot):

@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from agenthound.discovery.behavior_files import read_json, read_jsonc
 from agenthound.discovery.builtin_read import read_capability
 from agenthound.discovery.builtin_bash import bash_capability
-from agenthound.discovery.claude_mcp import claude_mcp_paths, mcp_capabilities
+from agenthound.discovery.claude_mcp import claude_mcp_paths, load_object, mcp_capabilities
 
 from agenthound.discovery.profiles import (
     claims_for_profile,
@@ -439,16 +439,19 @@ def parse_config(config_path: Path) -> tuple[Agent, list[Capability]]:
         from agenthound.discovery.codex_settings import collect_codex_settings
 
         return collect_codex_settings([config_path], config_path.parent.parent)
-    reader = (
-        read_jsonc
-        if _detect_agent(config_path)[0] in {"vscode-copilot", "copilot-cli"}
-        else read_json
-    )
-    raw = reader(config_path, config_path.parent)
-    if raw is None:
-        raise ValueError(
-            f"Cannot parse config {config_path}: expected a readable JSON object of at most 64 KiB"
+    if config_path.name == ".claude.json":
+        raw = load_object(config_path)
+    else:
+        reader = (
+            read_jsonc
+            if _detect_agent(config_path)[0] in {"vscode-copilot", "copilot-cli"}
+            else read_json
         )
+        raw = reader(config_path, config_path.parent)
+        if raw is None:
+            raise ValueError(
+                f"Cannot parse config {config_path}: expected a readable JSON object of at most 64 KiB"
+            )
 
     if config_path.name in {".claude.json", ".mcp.json"}:
         agent = Agent(

@@ -30,7 +30,7 @@ def merge_graphs(*payloads: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_metadata_graph(listing: dict[str, Any]) -> dict[str, Any]:
-    """Model conditional Copilot document-context paths using API listing evidence."""
+    """Model candidate document access without claiming listed files are inputs."""
     if listing.get("authentication") != "copilot_wam":
         raise ValueError("Copilot metadata graph requires a Copilot WAM observation")
     tenant = listing["tenant_id"]
@@ -84,21 +84,15 @@ def build_metadata_graph(listing: dict[str, Any]) -> dict[str, Any]:
         if doc_id in seen:
             continue
         seen.add(doc_id)
-        nodes.append({"id": doc_id, "kinds": ["Source", "Asset"], "properties": {
+        nodes.append({"id": doc_id, "kinds": ["Asset"], "properties": {
             **props, "name": doc.name, "displayname": doc.name,
             "asset_kind": "SharePointDocument", "path": doc.web_url,
-            "source_kind": "DocFile", "is_external": True,
             "site_url": item.get("site_url", ""), "library": library,
             "library_title": item.get("library_title", library),
             "observation_kind": "file_metadata", "content_access_verified": False,
             "content_access_verification": "not_tested",
         }})
         edges.append(edge(cap_id, doc_id, "CanAccess"))
-        influence = edge(doc_id, session_id, "Influences")
-        influence["properties"]["evidence"] = (
-            "Document in an observed content library is a candidate input when explicitly supplied to Copilot; ingestion not observed"
-        )
-        edges.append(influence)
     nodes[0]["properties"].update({
         "collection_complete": listing.get("complete", False),
         "collection_error_count": len(listing.get("errors", [])),

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from agenthound.collectors.capabilities import collect_from_config, collect_from_configs
+from agenthound.discovery.claude_mcp import load_object
 from agenthound.discovery.config_parser import discover_config_files
 from agenthound.output.opengraph import build_opengraph
 
@@ -41,6 +42,19 @@ def test_mcp_only_discovery_one_agent_and_read(layout):
     assert len(result.agents) == 1
     assert {c.name for c in result.capabilities} == {'fetch', 'git', 'Read'}
     assert all(e.properties['confidence'] == 'suspected' for e in result.edges)
+
+
+def test_claude_state_supports_bounded_normal_growth(layout):
+    home, _ = layout
+    path = write(home / '.claude.json', {
+        'mcpServers': {'fetch': server('mcp-server-fetch')},
+        'projects': {'padding': {'history': 'x' * (70 * 1024)}},
+    })
+    assert path.stat().st_size > 64 * 1024
+    assert load_object(path)['mcpServers']['fetch']['args'] == ['mcp-server-fetch']
+    result = collect_from_config(path)
+    assert {cap.name for cap in result.capabilities} == {'fetch', 'Read'}
+    assert 'history' not in json.dumps(build_opengraph(result))
 
 
 def test_local_project_user_whole_definition_precedence(layout):

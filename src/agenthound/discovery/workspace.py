@@ -8,10 +8,6 @@ from pathlib import Path
 
 from agenthound.models.nodes import AssetKind, SourceKind
 
-_DOC_EXTENSIONS = {".md", ".txt", ".html", ".rst", ".xml"}
-
-_SOURCE_DIRS = {"docs", "context", "prompts", "instructions", "knowledge"}
-
 # Dependency / build / VCS trees: files here are vendored or generated, not
 # the project's own untrusted inputs or secrets, so both source and asset
 # scanning skip them to cut false positives.
@@ -77,10 +73,7 @@ _GLOBAL_ASSET_ROOTS = [
 def _source_kind(path: Path, workspace: Path) -> SourceKind | None:
     from agenthound.discovery.source_registry import classify_source
 
-    kind = classify_source(path, workspace)
-    if kind is not None:
-        return kind
-    return "DocFile" if path.suffix.lower() in _DOC_EXTENSIONS else None
+    return classify_source(path, workspace)
 
 
 def _asset_kind(path: Path) -> AssetKind | None:
@@ -110,19 +103,8 @@ def _is_git_repo_root(path: Path) -> bool:
     return False
 
 
-def _in_source_scope(root_path: Path, workspace: Path) -> bool:
-    """True if root_path is workspace root or under a source directory."""
-    if root_path == workspace:
-        return True
-    try:
-        rel_parts = root_path.relative_to(workspace).parts
-    except ValueError:
-        return False
-    return any(part in _SOURCE_DIRS for part in rel_parts)
-
-
 def find_source_files(workspace: Path) -> list[tuple[str, SourceKind]]:
-    """Find registered behavior files and existing scoped general documents."""
+    """Find files matching a registered agent behavior source format."""
     from agenthound.discovery.behavior_files import excluded_path, plugin_component, safe_file
 
     results: list[tuple[str, SourceKind]] = []
@@ -138,10 +120,6 @@ def find_source_files(workspace: Path) -> list[tuple[str, SourceKind]]:
             kind = _source_kind(path, workspace)
             if kind is None:
                 continue
-            if kind == "DocFile":
-                relative = path.relative_to(workspace)
-                if any(part.startswith(".") for part in relative.parts[:-1]) or not _in_source_scope(root, workspace):
-                    continue
             results.append((str(path), kind))
     return results
 

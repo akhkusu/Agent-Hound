@@ -6,11 +6,10 @@ from pathlib import Path
 from typing import cast
 
 from agenthound.collectors.base import CollectionResult
-from agenthound.discovery.behavior_files import BehaviorFile, DiscoveryContext, read_text, safe_file
+from agenthound.discovery.behavior_files import BehaviorFile, DiscoveryContext, read_text
 from agenthound.discovery.git_metadata import SourceMetadata, inspect_source
 from agenthound.discovery import skills
-from agenthound.discovery.source_registry import PLATFORM_NAMES, discover_behavior_files, matching_rule
-from agenthound.discovery.workspace import find_source_files
+from agenthound.discovery.source_registry import discover_behavior_files, matching_rule
 from agenthound.models.edges import Edge
 from agenthound.models.nodes import Agent, Asset, Source, SourceKind
 
@@ -87,34 +86,15 @@ def collect_sources_for_agents(agents: list[Agent], workspace: Path, scope: str,
         nodes[key] = source
         return source
 
-    # Retain general documents and orphan platform-specific Source nodes, but
-    # never infer an edge from classification alone.
-    raw = find_source_files(workspace) if context.allows("project") else []
-    specific_paths = {candidate.path.resolve() for candidates in observations.values() for candidate in candidates}
-    docs: list[Source] = []
-    for path_str, kind in raw:
-        path = Path(path_str)
-        if not safe_file(path, workspace) or path.resolve() in specific_paths:
-            continue
-        source = add_source(path, kind)
-        if kind == "DocFile":
-            docs.append(source)
-
     for agent in agents:
-        for doc in docs:
-            result.edges.append(Edge(start=doc.objectid, end=agent.objectid, kind="Influences", properties={
-                "confidence": "suspected", "evidence": "Existing scoped document source; actual reading unverified",
-                "influence_channel": "prompt_context", "activation": "on_demand", "source_scope": "project",
-                "platform": PLATFORM_NAMES.get(agent.name, agent.platform), "content_exported": False,
-            }))
         for candidate in observations[agent.objectid]:
+            if candidate.discovery_status in {"overridden", "disabled", "out_of_scope"}:
+                continue
             source = add_source(candidate.path, cast(SourceKind, candidate.rule.source_kind), candidate)
             activation = candidate.activation or candidate.rule.activation
             confidence = candidate.confidence or candidate.rule.confidence
             if activation in {"conditional", "on_demand", "session_resume", "unknown"}:
                 confidence = "suspected"
-            if candidate.discovery_status in {"overridden", "disabled", "out_of_scope"}:
-                continue
             properties: dict[str, str | int | bool] = {
                 "confidence": confidence, "evidence": candidate.evidence or candidate.rule.evidence,
                 "influence_channel": candidate.rule.influence_channel, "activation": activation,

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
 
-from agenthound.discovery.behavior_files import read_json
+from agenthound.discovery.behavior_files import MAX_READ_BYTES, read_json, safe_file
 from agenthound.models.nodes import Agent, Capability
+
+
+_MAX_CLAUDE_STATE_BYTES = 1024 * 1024
 
 
 def claude_mcp_paths(workspace: Path) -> list[Path]:
@@ -20,10 +24,26 @@ def claude_mcp_paths(workspace: Path) -> list[Path]:
 
 
 def load_object(path: Path) -> dict[str, Any]:
+    if path.name == ".claude.json":
+        try:
+            if not safe_file(path, path.parent) or path.stat().st_size > _MAX_CLAUDE_STATE_BYTES:
+                raise ValueError
+            with path.open("rb") as stream:
+                contents = stream.read(_MAX_CLAUDE_STATE_BYTES + 1)
+            if len(contents) > _MAX_CLAUDE_STATE_BYTES:
+                raise ValueError
+            value = json.loads(contents.decode("utf-8-sig"))
+            if not isinstance(value, dict):
+                raise ValueError
+            return value
+        except (OSError, UnicodeError, ValueError, RecursionError):
+            raise ValueError(
+                f"Cannot parse config {path}: expected a readable JSON object of at most 1 MiB"
+            ) from None
     raw = read_json(path, path.parent)
     if raw is None:
         raise ValueError(
-            f"Cannot parse config {path}: expected a readable JSON object of at most 64 KiB"
+            f"Cannot parse config {path}: expected a readable JSON object of at most {MAX_READ_BYTES // 1024} KiB"
         )
     return raw
 

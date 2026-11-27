@@ -2,6 +2,8 @@
 
 `agenthound m365-files` lists file metadata using the current Windows user's Copilot account. It discovers SharePoint locations and displays up to 20 files by default. It does not download document contents or collect complete ACLs.
 
+Listed files are access candidates, not agent inputs. Listing alone does not add a Source kind or `Influences` edge; an explicit configured reference or observed retrieval is required.
+
 ## Requirements
 
 The default mode requires Windows, an existing organizational Copilot sign-in, and Agent-Hound's Windows authentication dependencies:

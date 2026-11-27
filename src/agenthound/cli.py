@@ -645,6 +645,7 @@ def register_icons(bh_url: str, username: str, password: str) -> None:
     """Upload Agent-Hound node icons to a running BloodHound CE instance."""
     import json as _json
     import urllib.error
+    import urllib.parse
     import urllib.request
 
     base = bh_url.rstrip("/")
@@ -676,7 +677,40 @@ def register_icons(bh_url: str, username: str, password: str) -> None:
             for kind, cfg in CUSTOM_TYPES.items():
                 console.print(f"  [cyan]{kind}[/cyan]: {cfg['icon']['name']}")
     except urllib.error.HTTPError as e:
-        console.print(f"[red]HTTP {e.code}: {e.reason}[/red]")
+        if e.code != 409:
+            console.print(f"[red]HTTP {e.code}: {e.reason}[/red]")
+            return
+        # BloodHound rejects a duplicate batch instead of updating it. Upsert
+        # each type so this command also repairs the default question-mark
+        # icons assigned when graph data was ingested before icon registration.
+        for kind, cfg in CUSTOM_TYPES.items():
+            kind_url = f"{base}/api/v2/custom-nodes/{urllib.parse.quote(kind, safe='')}"
+            update_payload = _json.dumps({"config": cfg}).encode()
+            update_req = urllib.request.Request(kind_url, data=update_payload, method="PUT")
+            update_req.add_header("Authorization", f"Bearer {token}")
+            update_req.add_header("Content-Type", "application/json")
+            try:
+                with urllib.request.urlopen(update_req):
+                    pass
+            except urllib.error.HTTPError as update_error:
+                if update_error.code != 404:
+                    console.print(f"[red]{kind}: HTTP {update_error.code}: {update_error.reason}[/red]")
+                    return
+                create_payload = _json.dumps({"custom_types": {kind: cfg}}).encode()
+                create_req = urllib.request.Request(
+                    f"{base}/api/v2/custom-nodes", data=create_payload, method="POST"
+                )
+                create_req.add_header("Authorization", f"Bearer {token}")
+                create_req.add_header("Content-Type", "application/json")
+                try:
+                    with urllib.request.urlopen(create_req):
+                        pass
+                except urllib.error.HTTPError as create_error:
+                    console.print(f"[red]{kind}: HTTP {create_error.code}: {create_error.reason}[/red]")
+                    return
+        console.print("[green]Icons updated[/green]")
+        for kind, cfg in CUSTOM_TYPES.items():
+            console.print(f"  [cyan]{kind}[/cyan]: {cfg['icon']['name']}")
     except urllib.error.URLError as e:
         console.print(f"[red]Connection failed: {e.reason}[/red]")
 

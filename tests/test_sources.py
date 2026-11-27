@@ -13,22 +13,20 @@ def test_collect_sources_finds_agent_instructions(tmp_path):
     assert "AgentInstruction" in kinds
 
 
-def test_collect_sources_creates_influences_edges(tmp_path):
+def test_general_documents_are_excluded_by_default(tmp_path):
     (tmp_path / "notes.md").write_text("# notes")
     agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
-    edges = [e for e in result.edges if e.kind == "Influences"]
-    assert len(edges) == len(result.sources)
-    for edge in edges:
-        assert edge.end == agent.objectid
+    assert result.sources == []
+    assert result.edges == []
 
 
-def test_readme_is_a_source(tmp_path):
+def test_readme_is_not_a_source_without_agent_configuration(tmp_path):
     (tmp_path / "README.md").write_text("# readme")
     agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
-    assert [source.source_kind for source in result.sources] == ["DocFile"]
-    assert [edge.kind for edge in result.edges] == ["Influences"]
+    assert result.sources == []
+    assert result.edges == []
 
 
 def test_skill_only_influences_matching_agent(tmp_path):
@@ -152,7 +150,11 @@ def test_structured_sources_have_descriptive_names(tmp_path):
         str(Path(source.path).relative_to(tmp_path)): source.name
         for source in result.sources
     }
-    assert names_by_path == files
+    expected = {
+        path: name for path, name in files.items()
+        if not path.startswith(".cursor/")
+    }
+    assert names_by_path == expected
 
 
 def test_collect_sources_edge_starts_from_source(tmp_path):
@@ -175,8 +177,7 @@ def test_cursorrules_does_not_influence_claude(tmp_path):
     (tmp_path / ".cursorrules").write_text("rules")
     agent = Agent(name="claude-desktop", platform="Claude Desktop", config_path=str(tmp_path))
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
-    # The source node exists, but there is no Influences edge to Claude.
-    assert any(s.name == ".cursorrules" for s in result.sources)
+    assert result.sources == []
     assert [e for e in result.edges if e.kind == "Influences"] == []
 
 
@@ -186,14 +187,6 @@ def test_cursorrules_influences_cursor_confirmed(tmp_path):
     result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
     edge = next(e for e in result.edges if e.kind == "Influences")
     assert edge.properties["confidence"] == "confirmed"
-
-
-def test_docfile_influence_is_suspected(tmp_path):
-    (tmp_path / "notes.md").write_text("# notes")
-    agent = Agent(name="claude-code", platform="Claude Code", config_path=str(tmp_path))
-    result = collect_sources(agent=agent, workspace=tmp_path, scope="workspace")
-    edge = next(e for e in result.edges if e.kind == "Influences")
-    assert edge.properties["confidence"] == "suspected"
 
 
 def test_instruction_does_not_influence_unsupported_agent(tmp_path):

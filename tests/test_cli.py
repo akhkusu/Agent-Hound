@@ -61,6 +61,19 @@ def test_scan_output_contains_agent_node(tmp_path):
     assert "Agent" in kinds_in_graph
 
 
+def test_scan_excludes_general_documents(tmp_path):
+    config = FIXTURES / "claude_desktop_config.json"
+    (tmp_path / "README.md").write_text("# project", encoding="utf-8")
+    default_output = tmp_path / "default.json"
+    default_result = CliRunner().invoke(cli, [
+        "scan", "--config", str(config), "--workspace", str(tmp_path),
+        "--scope", "workspace", "--output", str(default_output),
+    ])
+    assert default_result.exit_code == 0, default_result.output
+    default_nodes = json.loads(default_output.read_text())["graph"]["nodes"]
+    assert not any(node["properties"].get("source_kind") == "DocFile" for node in default_nodes)
+
+
 def test_scan_subcommand_runs(tmp_path, monkeypatch):
     # Keep the test independent of real user configuration files. Parsing
     # malformed discovered configs is covered separately from CLI dispatch.

@@ -73,9 +73,8 @@ def test_codex_agents_instruction_override(tmp_path):
     override = next(
         source for source in result.sources if source.name == "AGENTS.override.md"
     )
-    base = next(source for source in result.sources if source.name == "AGENTS.md")
     assert override.objectid in influenced
-    assert base.objectid not in influenced
+    assert not any(source.name == "AGENTS.md" for source in result.sources)
 
 
 def test_codex_cli_export_omits_env_values(tmp_path):
@@ -112,7 +111,7 @@ def test_codex_builtin_read_links_source_to_workspace_asset(tmp_path):
     config = tmp_path / ".codex/config.toml"
     config.parent.mkdir()
     config.write_text("", encoding="utf-8")
-    (tmp_path / "README.md").write_text("synthetic input", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("synthetic instructions", encoding="utf-8")
     (tmp_path / ".env").write_text("SYNTHETIC=placeholder", encoding="utf-8")
     result = collect_from_configs([config], workspace=tmp_path)
     read = next(c for c in result.capabilities if c.name == "Read")

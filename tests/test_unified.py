@@ -28,12 +28,11 @@ def snapshot():
 def test_metadata_scope_does_not_claim_document_retrieval():
     payload = build_metadata_graph(listing())
     graph = payload["graph"]
-    assert {e["kind"] for e in graph["edges"]} == {"HasCapability", "CanAccess", "Influences"}
-    assert any(n["kinds"] == ["Source", "Asset"] for n in graph["nodes"])
-    path = next(attack_paths(payload))
-    assert path["target"] == "計画.docx"
-    assert path["context"] == "explicit document context required"
-    assert path["confidence"] == "suspected"
+    assert {e["kind"] for e in graph["edges"]} == {"HasCapability", "CanAccess"}
+    assert any(n["kinds"] == ["Asset"] for n in graph["nodes"])
+    paths = list(attack_paths(payload))
+    assert len(paths) == 1
+    assert paths[0]["entry"] == "Agent capability"
     edge = graph["edges"][-1]
     assert edge["properties"]["retrieval_verified"] is False
     assert edge["properties"]["access_scope"] == "document_content"
@@ -114,7 +113,9 @@ def test_scan_live_collection_uses_same_graph(tmp_path, monkeypatch):
     assert calls[0]["display_limit"] == 5
     assert calls[0]["enumerate_all"] is True
     assert "content access unverified" in result.output
-    assert next(attack_paths(json.loads(out.read_text(encoding="utf-8"))))["target"] == "計画.docx"
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert all(path["entry"] == "Agent capability" for path in attack_paths(payload))
+    assert any(edge["kind"] == "CanAccess" for edge in payload["graph"]["edges"])
 
 
 @pytest.mark.parametrize("args", [["--no-copilot", "--include-registry"],
@@ -158,7 +159,7 @@ def test_local_lab_is_excluded_from_source_and_asset_discovery(tmp_path):
     (lab / "AGENTS.md").write_text("private lab instruction", encoding="utf-8")
     (lab / ".env").write_text("SYNTHETIC=placeholder", encoding="utf-8")
     (tmp_path / "README.md").write_text("public", encoding="utf-8")
-    assert len(find_source_files(tmp_path)) == 1
+    assert find_source_files(tmp_path) == []
     assert find_asset_files("workspace", tmp_path) == []
 
 
@@ -178,7 +179,7 @@ def test_discovery_reads_utf8_bom_configs_with_document_names(tmp_path):
     assert parse_config(config)[0].name == "claude-code"
 
 
-def test_sharepoint_candidates_form_original_attack_chain_and_omit_system_files():
+def test_sharepoint_candidates_are_assets_only_and_omit_system_files():
     data = listing()
     doc = data["items"][0]
     doc.update(site_url="https://example.sharepoint.com/sites/team", library="Shared Documents",
@@ -190,12 +191,10 @@ def test_sharepoint_candidates_form_original_attack_chain_and_omit_system_files(
     graph = build_metadata_graph(data)["graph"]
     asset = next(n for n in graph["nodes"] if "Asset" in n["kinds"])
     assert len(graph["nodes"]) == 3
-    assert asset["kinds"] == ["Source", "Asset"]
-    source_edge = next(e for e in graph["edges"] if e["kind"] == "Influences")
+    assert asset["kinds"] == ["Asset"]
+    assert not any(e["kind"] == "Influences" for e in graph["edges"])
     capability = next(e for e in graph["edges"] if e["kind"] == "HasCapability")
     access = next(e for e in graph["edges"] if e["kind"] == "CanAccess")
-    assert source_edge["start"]["value"] == asset["id"]
-    assert source_edge["end"] == capability["start"]
     assert capability["end"] == access["start"]
     assert access["end"]["value"] == asset["id"]
     assert all(e["properties"]["confidence"] == "suspected" for e in graph["edges"])
@@ -211,7 +210,8 @@ def test_unified_full_attack_chain_covers_claude_codex_and_copilot(tmp_path, mon
     codex = workspace / ".codex/config.toml"
     claude.write_text('{"permissions":{"allow":["Read"],"deny":["Bash"]}}', encoding="utf-8")
     codex.write_text("", encoding="utf-8")
-    (workspace / "README.md").write_text("synthetic source", encoding="utf-8")
+    (workspace / "CLAUDE.md").write_text("synthetic Claude instructions", encoding="utf-8")
+    (workspace / "AGENTS.md").write_text("synthetic Codex instructions", encoding="utf-8")
     (workspace / ".env").write_text("SYNTHETIC=placeholder", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
@@ -225,5 +225,19 @@ def test_unified_full_attack_chain_covers_claude_codex_and_copilot(tmp_path, mon
     assert result.exit_code == 0, result.output
     payload = json.loads(out.read_text(encoding="utf-8"))
     paths = list(attack_paths(payload))
-    assert {p["agent"] for p in paths} >= {"Claude Code", "Codex", "Copilot (SharePoint work-account context)"}
-    assert all(p["entry"].endswith("(Influences)") for p in paths)
+    assert {p["agent"] for p in paths} >= {"Claude Code", "Codex"}
+    assert "Copilot (SharePoint work-account context)" in {
+        node["properties"].get("displayname")
+        for node in payload["graph"]["nodes"]
+        if "Agent" in node["kinds"]
+    }
+    assert all(
+        path["entry"].endswith("(Influences)")
+        for path in paths
+        if path["agent"] != "Copilot (SharePoint work-account context)"
+    )
+    assert all(
+        path["entry"] == "Agent capability"
+        for path in paths
+        if path["agent"] == "Copilot (SharePoint work-account context)"
+    )
