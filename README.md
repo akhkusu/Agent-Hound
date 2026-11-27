@@ -21,11 +21,13 @@ Built on the [SpecterOps OpenGraph](https://specterops.io/opengraph/) specificat
 
 ## Graph Model
 
-Agent-Hound models AI agent environments as five node types connected by four edge types, then exports the graph to BloodHound OpenGraph:
+Agent-Hound models AI agent environments as five node types connected by five core edge types, then exports the graph to BloodHound OpenGraph:
 
 <p align="center">
-  <img src="img/demo.png" alt="Agent-Hound graph in BloodHound" width="100%"/>
+  <a href="examples/blackhat-arsenal/figures/agenthound-bloodhound-readme.png"><img src="examples/blackhat-arsenal/figures/agenthound-bloodhound-readme.png" alt="BloodHound CE view showing Agent-Hound sources, built-in tools, MCP servers and their advertised tools, and local assets" width="100%"/></a>
 </p>
+
+<p align="center"><a href="examples/blackhat-arsenal/README.md">Reproduce the representative sample</a></p>
 
 | Node | Role | Examples |
 | :--- | :--- | :--- |
@@ -35,7 +37,7 @@ Agent-Hound models AI agent environments as five node types connected by four ed
 | **Asset** | Discovered sensitive files and source repositories | `~/.ssh/id_rsa`, `.env`, a local Git repository |
 | **Impact** | Potential consequences inferred from capabilities and environment checks | `System-Takeover`, `Internet-Exfiltration`, `Supply-Chain-Contamination` |
 
-**Edges:** `Influences` (Source → Agent) · `HasCapability` (Agent → Capability) · `CanAccess` (Capability → Asset) · `Triggers` (Capability → Impact)
+**Edges:** `Influences` (Source → Agent) · `HasCapability` (Agent → Capability) · `Exposes` (MCP server → MCP tool) · `CanAccess` (Capability → Asset) · `Triggers` (Capability → Impact)
 
 ---
 

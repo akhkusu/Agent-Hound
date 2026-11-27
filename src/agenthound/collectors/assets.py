@@ -125,20 +125,26 @@ def collect_assets(
             seen.add(asset.objectid)
             for cap in privileged:
                 if cap.cap_kind == "BuiltInTool":
-                    properties = (
-                        codex_builtin_access(cap, asset, workspace)
-                        if cap.file_evidence.startswith("builtin:codex:")
-                        else read_access(cap, asset, workspace)
-                    )
-                    if properties is not None:
-                        result.edges.append(
-                            Edge(
-                                start=cap.objectid,
-                                end=asset.objectid,
-                                kind="CanAccess",
-                                properties=properties,
-                            )
+                    if cap.file_evidence.startswith("builtin:codex:"):
+                        properties = codex_builtin_access(cap, asset, workspace)
+                        if properties is None:
+                            continue
+                    elif cap.name == "Read":
+                        properties = read_access(cap, asset, workspace)
+                        if properties is None:
+                            continue
+                    else:
+                        if not _can_access(cap, asset):
+                            continue
+                        properties = _edge_properties(cap)
+                    result.edges.append(
+                        Edge(
+                            start=cap.objectid,
+                            end=asset.objectid,
+                            kind="CanAccess",
+                            properties=properties,
                         )
+                    )
                     continue
                 if not _can_access(cap, asset):
                     continue

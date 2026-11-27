@@ -76,6 +76,23 @@ def test_non_file_source_keeps_semantic_name():
     assert "filename" not in node["properties"]
 
 
+def test_skill_source_uses_semantic_name_and_keeps_literal_filename():
+    source = Source(
+        name="Skill: deploy",
+        source_kind="Skill",
+        path="/project/.claude/skills/deploy/SKILL.md",
+    )
+    original_id = source.objectid
+
+    node = source.to_opengraph()
+
+    assert node["id"] == original_id
+    assert node["properties"]["name"] == "Skill: deploy"
+    assert node["properties"]["displayname"] == "Skill: deploy"
+    assert node["properties"]["filename"] == "SKILL.md"
+    assert node["properties"]["path"] == source.path
+
+
 def test_capability_has_shell_flag():
     c = Capability(name="bash-hook", cap_kind="ShellHook", has_shell=True)
     assert c.has_shell is True
@@ -103,12 +120,15 @@ def test_capability_labels_distinguish_mcp_server_tool_and_builtin():
         mcp_server_name="project-files",
     )
     builtin = Capability(name="Bash", cap_kind="BuiltInTool")
+    original_tool_id = mcp_tool.objectid
 
-    tool_props = mcp_tool.to_opengraph()["properties"]
+    tool_node = mcp_tool.to_opengraph()
+    tool_props = tool_node["properties"]
     builtin_props = builtin.to_opengraph()["properties"]
 
-    assert tool_props["name"] == "MCP Tool: read_file"
-    assert tool_props["displayname"] == "MCP Tool: read_file"
+    assert tool_node["id"] == original_tool_id
+    assert tool_props["name"] == "project-files: read_file"
+    assert tool_props["displayname"] == "project-files: read_file"
     assert tool_props["internal_name"] == "project-files: read_file"
     assert tool_props["mcp_server_name"] == "project-files"
     assert tool_props["tool_name"] == "read_file"

@@ -6,6 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from agenthound.cli import cli
+from agenthound.collectors.assets import collect_assets
 from agenthound.collectors.capabilities import collect_from_configs
 
 
@@ -23,6 +24,28 @@ def test_explicit_bash_allow(tmp_path):
     edge = next(edge for edge in result.edges if edge.end == bash.objectid)
     assert edge.properties["confidence"] == "suspected"
     assert "Bash" in edge.properties["evidence"]
+
+
+def test_bash_asset_access_uses_bash_evidence(tmp_path):
+    project = tmp_path / "project"
+    settings = project / ".claude" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text(json.dumps({"permissions": {"allow": ["Bash"]}}))
+    (project / ".env").write_text("DEMO_KEY=dummy")
+    capabilities = collect_from_configs([settings], workspace=project).capabilities
+
+    result = collect_assets(capabilities, project, "workspace")
+    env = next(asset for asset in result.assets if asset.path.endswith("/.env"))
+    bash = next(cap for cap in capabilities if cap.name == "Bash")
+    edge = next(
+        edge
+        for edge in result.edges
+        if edge.start == bash.objectid and edge.end == env.objectid
+    )
+
+    assert edge.properties["confidence"] == "suspected"
+    assert edge.properties["evidence"].startswith("builtin:claude-code:Bash")
+    assert "builtin:claude-code:Read" not in edge.properties["evidence"]
 
 
 @pytest.mark.parametrize("permissions", [
