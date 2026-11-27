@@ -2,7 +2,7 @@
 
 Coverage reviewed against official documentation on **2026-11-19**.
 
-Agent-Hound discovers documented agent files, bounded local references from those files, and the existing scoped document sources. It does not treat every readable file as agent context. Ordinary discovery uses the normal scan command:
+Agent-Hound emits a `Source` only when there is a documented path into an observed agent's context: automatic loading, explicit configuration/reference, an invocable definition, a live advertisement, or observed use. File existence, readability, repository location, or account-level access alone is not enough. Ordinary discovery uses the normal scan command:
 
 ```bash
 agenthound scan /path/to/project --scope all -o graph.json -v
@@ -20,7 +20,9 @@ agenthound scan /path/to/project --scope all -o graph.json -v
 
 The project root is the nearest enclosing Git repository, or the selected directory when no repository is found. Ancestor discovery follows the path from that root to the selected workspace; it does not walk sibling projects. `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `COPILOT_HOME` select their documented user roots. Scope limits Source and Asset collection; agent configuration discovery is separate.
 
-A `Source` records a file's presence and safe metadata. An `Influences` edge identifies the applicable agent, influence channel, activation, confidence, evidence, and scope. A file can affect several agents in different ways; inspect the edge properties for each relationship. A recognized file can remain an **unlinked** Source when it is overridden, unsupported by the selected agent, or outside its applicable hierarchy. A Source node alone does not establish loading.
+A `Source` records a supported context input and safe metadata. An `Influences` edge identifies the applicable agent, influence channel, activation, confidence, evidence, and scope. A file can affect several agents in different ways; inspect the edge properties for each relationship. Overridden, disabled, out-of-scope, unsupported, and merely readable files are not emitted as inputs.
+
+This boundary applies equally to README files, design documents, code, comments, logs, and test data. Any of them could contain malicious instructions, but they become Sources only when configuration, a supported reference, live advertisement, or observation connects them to the agent. Agent-Hound models evidence of context entry, not every byte an agent could theoretically read.
 
 Runtime configuration uses `influence_channel=runtime_configuration` and `activation=configured`. Ignore files use `context_visibility`. These relationships describe behavior configuration and are not prompt-injection entry points merely because an `Influences` edge exists.
 
@@ -136,9 +138,9 @@ Not inferred: undocumented user/team rule storage, marketplace cache paths, exte
 
 References: [Rules](https://cursor.com/docs/rules), [skills](https://cursor.com/docs/skills), [subagents](https://cursor.com/docs/subagents), [MCP](https://cursor.com/docs/mcp), [ignore files](https://cursor.com/docs/reference/ignore-file), [hooks](https://cursor.com/docs/hooks), [plugins](https://cursor.com/docs/plugins), [plugin formats](https://cursor.com/docs/reference/plugins).
 
-## Existing sources and privacy limits
+## Source boundary and privacy limits
 
-Existing `README.md`, scoped documentation, `GEMINI.md`, and `SYSTEM_PROMPT.md` discovery is retained. General documents remain suspected/on-demand sources. Platform-specific instructions target their supported agents; filename similarity alone never establishes an edge. Existing MCP resource/prompt advertisement discovery is preserved and remains distinct from reading their bodies.
+General documents are not Sources merely because they exist under the workspace or a documentation directory. They can still be included through a documented mechanism, such as a configured Codex fallback filename, a bounded instruction import, a rule reference, an M365 knowledge-source reference, or observed retrieval. Platform-specific instructions target only their supported observed agents; filename similarity alone never creates a node or edge. Live MCP resources and prompts are Sources only after the configured server advertises them during explicit live discovery, and `Exposes` remains distinct from invocation or reading their bodies.
 
 Plugin caches are excluded by default. To inspect selected enabled or explicitly declared installed components:
 

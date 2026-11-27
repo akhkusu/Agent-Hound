@@ -62,22 +62,30 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
             }
         )
 
-    document_ids = {
-        d.id: node(
-            "document",
-            d.id,
-            ["Source", "Asset"],
-            name=d.name,
-            displayname=d.name,
-            source_kind="DocFile",
-            asset_kind="SharePointDocument",
-            path=d.web_url,
-            classification=d.classification,
-            acl_complete=d.acl_complete,
-            is_external=True,
-        )
-        for d in snapshot.documents
+    referenced_document_ids = {
+        reference.document_id
+        for agent in snapshot.agents
+        for reference in agent.references
     }
+    document_ids: dict[str, str] = {}
+    for document in snapshot.documents:
+        referenced = document.id in referenced_document_ids
+        properties: dict[str, Any] = {
+            "name": document.name,
+            "displayname": document.name,
+            "asset_kind": "SharePointDocument",
+            "path": document.web_url,
+            "classification": document.classification,
+            "acl_complete": document.acl_complete,
+        }
+        if referenced:
+            properties.update(source_kind="DocFile", is_external=True)
+        document_ids[document.id] = node(
+            "document",
+            document.id,
+            ["Source", "Asset"] if referenced else ["Asset"],
+            **properties,
+        )
     for agent in snapshot.agents:
         agent_id = node(
             "agent",
@@ -177,6 +185,8 @@ def build_m365_graph(snapshot: M365Snapshot) -> dict[str, Any]:
                 ref.evidence,
                 confidence="confirmed" if ref.mode == "retrieved" else "suspected",
                 reference_mode=ref.mode,
+                activation="observed" if ref.mode == "retrieved" else "configured",
+                influence_channel="document_context",
                 retrieval_route=ref.retrieval_route,
                 observed_at=ref.observed_at or snapshot.observed_at,
             )

@@ -13,15 +13,11 @@ def test_find_agent_instruction_files(tmp_path):
     assert "main.py" not in names
 
 
-def test_find_doc_files(tmp_path):
+def test_general_documents_are_not_registered_sources(tmp_path):
     (tmp_path / "README.md").write_text("# readme")
     (tmp_path / "notes.txt").write_text("notes")
     (tmp_path / "page.html").write_text("<html/>")
-    results = find_source_files(tmp_path)
-    names = {Path(p).name for p, _ in results}
-    assert "README.md" in names
-    assert "notes.txt" in names
-    assert "page.html" in names
+    assert find_source_files(tmp_path) == []
 
 
 def test_find_structured_agent_sources(tmp_path):
@@ -51,10 +47,9 @@ def test_source_kind_agent_instruction(tmp_path):
     assert "AgentInstruction" in kinds
 
 
-def test_source_kind_doc_file(tmp_path):
+def test_unconfigured_readme_has_no_source_kind(tmp_path):
     (tmp_path / "README.md").write_text("x")
-    results = find_source_files(tmp_path)
-    assert any(kind == "DocFile" for _, kind in results)
+    assert find_source_files(tmp_path) == []
 
 
 def test_find_ssh_keys(tmp_path):
@@ -146,14 +141,11 @@ def test_nested_git_repo_detected(tmp_path):
     assert any("submodule" in p for p in source_paths)
 
 
-def test_deep_source_dir_file(tmp_path):
-    """Doc files inside nested source dirs (docs/arch/x.md) must be found."""
+def test_deep_general_document_is_not_a_registered_source(tmp_path):
     docs = tmp_path / "docs" / "architecture"
     docs.mkdir(parents=True)
     (docs / "overview.md").write_text("overview")
-    results = find_source_files(tmp_path)
-    paths = {Path(p).name for p, _ in results}
-    assert "overview.md" in paths
+    assert find_source_files(tmp_path) == []
 
 
 def test_vscode_copilot_instruction_in_hidden_github_dir(tmp_path):
