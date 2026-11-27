@@ -75,6 +75,11 @@ def _path_filename(path: str) -> str:
 
 
 def _source_display_name(source: Source) -> str:
+    # A skill manifest is commonly named SKILL.md, so the filename alone hides
+    # which reusable skill it represents. Keep the semantic skill name while
+    # retaining the literal filename and full path in node properties.
+    if source.source_kind == "Skill":
+        return source.name
     if source.source_kind in _FILE_SOURCE_KINDS:
         return _path_filename(source.path) or source.name
     return source.name
@@ -84,7 +89,12 @@ def _capability_display_name(capability: Capability) -> str:
     if capability.cap_kind == "MCPServer":
         return f"MCP: {capability.name}"
     if capability.cap_kind == "MCPTool":
-        return f"MCP Tool: {capability.tool_name or capability.name}"
+        tool_name = capability.tool_name or capability.name
+        return (
+            f"{capability.mcp_server_name}: {tool_name}"
+            if capability.mcp_server_name
+            else f"MCP Tool: {tool_name}"
+        )
     if capability.cap_kind == "BuiltInTool":
         return capability.tool_name or capability.name
     return capability.name
@@ -178,7 +188,7 @@ class Source(BaseModel):
             "content_exported": False,
         }
         if self.source_kind in _FILE_SOURCE_KINDS:
-            properties["filename"] = display_name
+            properties["filename"] = _path_filename(self.path) or self.name
         if self.git_repository_asset_id:
             properties.update(
                 git_repository_asset_id=self.git_repository_asset_id,

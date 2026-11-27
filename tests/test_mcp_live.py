@@ -67,7 +67,7 @@ def test_advertised_mcp_metadata_becomes_graph_nodes_without_content_access():
     assert tool.file_access == "suspected"
     assert tool.destructive_hint is True
     assert tool.mcp_server_name == "demo"
-    assert tool.to_opengraph()["properties"]["name"] == "MCP Tool: write_file"
+    assert tool.to_opengraph()["properties"]["name"] == "demo: write_file"
     assert "never-export-default" not in tool.input_schema
     assert {edge.kind for edge in result.edges} == {"Exposes"}
     assert {source.source_kind for source in result.sources} == {
